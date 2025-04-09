@@ -1,11 +1,9 @@
 package main
 
-/*
-#include <stdlib.h>
-int load_shared_library(const char* library_path, const char* function_name);
-void unload_shared_library();
-void discon(float* avrSWAP, int* aviFAIL, char* accINFILE, char* avcOUTNAME, char* avcMSG);
-*/
+// #include <stdlib.h>
+// int load_shared_library(const char* library_path, const char* function_name);
+// void unload_shared_library();
+// void discon(float* avrSWAP, int* aviFAIL, char* accINFILE, char* avcOUTNAME, char* avcMSG);
 import "C"
 import (
 	dw "discon-wrapper"

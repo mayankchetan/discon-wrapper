@@ -7,16 +7,16 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4
-      - name: Build x32 executables
-        env:
-          GOARCH: "386"
-          GOGCCFLAGS: -m32 -mthreads -static-libgcc
-          CFLAGS: -m32 -mthreads -static-libgcc
-        run: |
-          go build -o build/discon-server_x32.exe discon-wrapper/discon-server
-          go build -buildmode=c-shared -o build/discon-client_x32.exe discon-wrapper/discon-client
-          gcc -o build/test-discon_x32.dll test-discon/test-discon.c --shared -g
-          gcc -o build/test-app_x32.exe test-app/test-app.c -g
+      # - name: Build x32 executables
+      #   env:
+      #     GOARCH: "386"
+      #     GOGCCFLAGS: -m32 -mthreads -static-libgcc
+      #     CFLAGS: -m32 -mthreads -static-libgcc
+      #   run: |
+      #     go build -o build/discon-server_x32.exe discon-wrapper/discon-server
+      #     go build -buildmode=c-shared -o build/discon-client_x32.exe discon-wrapper/discon-client
+      #     gcc -o build/test-discon_x32.dll test-discon/test-discon.c --shared -g
+      #     gcc -o build/test-app_x32.exe test-app/test-app.c -g
       - name: Build x64 executables
         env:
           GOARCH: amd64
@@ -25,8 +25,8 @@ jobs:
         run: |
           go build -o build/discon-server_x64.exe discon-wrapper/discon-server
           go build -buildmode=c-shared -o build/discon-client_x64.exe discon-wrapper/discon-client
-          gcc -m64 -mthreads -static-libgcc -o build/test-discon_x64.dll test-discon/test-discon.c --shared -g
-          gcc -m64 -mthreads -static-libgcc -o build/test-app_x64.exe test-app/test-app.c --static -g
+          gcc -o build/test-discon_x64.dll test-discon/test-discon.c --shared -g
+          gcc -o build/test-app_x64.exe test-app/test-app.c --static -g
 
       - uses: actions/upload-artifact@v4
         with:
