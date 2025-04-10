@@ -4,37 +4,31 @@ on: [push]
 jobs:
   build-and-test-windows:
     runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - { sys: mingw64, env: x86_64 }
+          - { sys: mingw32, env: i686 }
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4
-      - name: add mingw32 to path
-        shell: bash
-        run: |
-          echo "C:\msys64\mingw32\bin" >> $GITHUB_PATH
-      - name: Build x32 executables
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{matrix.sys}}
+      - name: Build executables
         env:
           GOARCH: "386"
-          GOGCCFLAGS: -m32 -mthreads -static-libgcc
-          CFLAGS: -m32 -mthreads -static-libgcc
+          GOGCCFLAGS: -mthreads -static-libgcc
+          CFLAGS: -mthreads -static-libgcc
         run: |
           go build -o build/discon-server_x32.exe discon-wrapper/discon-server
           go build -buildmode=c-shared -o build/discon-client_x32.exe discon-wrapper/discon-client
-          i686-w64-mingw32-gcc -o build/test-discon_x32.dll test-discon/test-discon.c --shared -g
-          i686-w64-mingw32-gcc -o build/test-app_x32.exe test-app/test-app.c -g
-      - name: Build x64 executables
-        env:
-          GOARCH: amd64
-          GOGCCFLAGS: -m64 -mthreads -static-libgcc
-          CFLAGS: -m64 -mthreads -static-libgcc
-        run: |
-          go build -o build/discon-server_x64.exe discon-wrapper/discon-server
-          go build -buildmode=c-shared -o build/discon-client_x64.dll discon-wrapper/discon-client
-          x86_64-w64-mingw32-gcc -o build/test-discon_x64.dll test-discon/test-discon.c --shared -g
-          x86_64-w64-mingw32-gcc -o build/test-app_x64.exe test-app/test-app.c --static -g
-
+          gcc -o build/test-discon_x32.dll test-discon/test-discon.c --shared -g
+          gcc -o build/test-app_x32.exe test-app/test-app.c -g
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-binaries
+          name: windows-binaries-${{ matrix.env }}
           path: build/*
 
   # build-and-test-linux:
