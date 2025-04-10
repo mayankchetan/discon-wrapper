@@ -7,8 +7,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - { sys: mingw64, env: x86_64 }
-          - { sys: mingw32, env: i686 }
+          - { sys: mingw64, env: x86_64 , arch: amd64 }
+          - { sys: mingw32, env: i686, arch: 386 }
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4
@@ -18,14 +18,15 @@ jobs:
           msystem: ${{matrix.sys}}
       - name: Build executables
         env:
-          GOARCH: "386"
+          GOARCH: ${{ matrix.arch }}
           GOGCCFLAGS: -mthreads -static-libgcc
           CFLAGS: -mthreads -static-libgcc
         run: |
-          go build -o build/discon-server_x32.exe discon-wrapper/discon-server
-          go build -buildmode=c-shared -o build/discon-client_x32.exe discon-wrapper/discon-client
-          gcc -o build/test-discon_x32.dll test-discon/test-discon.c --shared -g
-          gcc -o build/test-app_x32.exe test-app/test-app.c -g
+          mkdir build
+          gcc -o build/test-discon_${{ matrix.env }}.dll test-discon/test-discon.c --shared -g
+          gcc -o build/test-app_${{ matrix.env }}.exe test-app/test-app.c -g
+          go build -o build/discon-server_${{ matrix.env }}.exe discon-wrapper/discon-server
+          go build -buildmode=c-shared -o build/discon-client_${{ matrix.env }}.exe discon-wrapper/discon-client
       - uses: actions/upload-artifact@v4
         with:
           name: windows-binaries-${{ matrix.env }}
