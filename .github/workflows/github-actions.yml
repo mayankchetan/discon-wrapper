@@ -20,6 +20,7 @@ jobs:
         env:
           GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: 1
+        shell: msys2 {0}
         run: |
           mkdir build
           gcc -o build/test-discon_${{ matrix.env }}.dll test-discon/test-discon.c --shared -g
