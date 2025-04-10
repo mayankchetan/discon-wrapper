@@ -19,8 +19,7 @@ jobs:
       - name: Build executables
         env:
           GOARCH: ${{ matrix.arch }}
-          GOGCCFLAGS: -mthreads -static-libgcc
-          CFLAGS: -mthreads -static-libgcc
+          CGO_ENABLED: 1
         run: |
           mkdir build
           gcc -o build/test-discon_${{ matrix.env }}.dll test-discon/test-discon.c --shared -g
