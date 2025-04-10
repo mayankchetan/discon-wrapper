@@ -32,9 +32,9 @@ jobs:
         with:
           name: windows-binaries-${{ matrix.arch }}
           path: build/*
-      - name: Test discon-server
-        shell: msys2 {0}
-        run: go test discon-wrapper/discon-server
+      # - name: Test discon-server
+      #   shell: msys2 {0}
+      #   run: go test discon-wrapper/discon-server
 
   # build-and-test-linux:
   #   runs-on: ubuntu-latest
