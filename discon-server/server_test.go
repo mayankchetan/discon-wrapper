@@ -13,7 +13,7 @@ import (
 
 func TestServeWs(t *testing.T) {
 
-	const port = 8081
+	const port = 18080
 
 	// connect handler to websocket function
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
