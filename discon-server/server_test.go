@@ -13,7 +13,7 @@ import (
 
 func TestServeWs(t *testing.T) {
 
-	const port = 8080
+	const port = 8081
 
 	// connect handler to websocket function
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +38,7 @@ func TestServeWs(t *testing.T) {
 
 	// Add query parameters for shared library path and proc
 	q := u.Query()
-	q.Add("path", "../test-discon/test-discon.dll")
+	q.Add("path", "../build/test-discon.dll")
 	q.Add("proc", "discon")
 	u.RawQuery = q.Encode()
 
@@ -54,7 +54,7 @@ func TestServeWs(t *testing.T) {
 		Fail:    1,
 		InFile:  []byte("input.txt\u0000"),
 		OutName: []byte("output.txt\u0000"),
-		Msg:     []byte("Hello, World!\u0000"),
+		Msg:     []byte("Hello, World!        \u0000"),
 	}
 	payload.Swap[48] = float32(len(payload.Msg))
 	payload.Swap[49] = float32(len(payload.InFile))
@@ -68,13 +68,20 @@ func TestServeWs(t *testing.T) {
 	}
 	ws.WriteMessage(websocket.BinaryMessage, b)
 
+	t.Log("Client sent payload:", payload)
+
+	// Clear data in payload
+	payload.Swap = make([]float32, len(payload.Swap))
+	payload.Fail = -1
+	payload.InFile = make([]byte, len(payload.InFile))
+	payload.OutName = make([]byte, len(payload.OutName))
+	payload.Msg = make([]byte, len(payload.Msg))
+
 	// Read response from server
 	_, b, err = ws.ReadMessage()
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	fmt.Println("Client sent payload:", payload)
 
 	// Unmarshal binary data into payload
 	err = payload.UnmarshalBinary(b)
@@ -83,20 +90,20 @@ func TestServeWs(t *testing.T) {
 	}
 
 	// Print payload
-	fmt.Println("Client received payload:", payload)
+	t.Log("Client received payload:", payload)
 
 	// Check if the payload is correct
 	if payload.Fail != 0 {
 		t.Errorf("Expected Fail to be 0, got %d", payload.Fail)
 	}
 	if string(payload.InFile) != "input.txt\u0000" {
-		t.Errorf("Expected InFile to be 'input.txt\\u0000', got %s", string(payload.InFile))
+		t.Errorf("Expected InFile to be 'input.txt\\u0000', got '%s'", string(payload.InFile))
 	}
 	if string(payload.OutName) != "output.txt\u0000" {
-		t.Errorf("Expected OutName to be 'output.txt\\u0000', got %s", string(payload.OutName))
+		t.Errorf("Expected OutName to be 'output.txt\\u0000', got '%s'", string(payload.OutName))
 	}
-	if string(payload.Msg) != "Welcome!     \u0000" {
-		t.Errorf("Expected Msg to be 'Welcome!     \\u0000', got %s", string(payload.Msg))
+	if string(payload.Msg) != "DISCON called 1 times\u0000" {
+		t.Errorf("Expected Msg to be 'DISCON called 1 times\\u0000', got '%s'", string(payload.Msg))
 	}
 	if len(payload.Swap) != 130 {
 		t.Errorf("Expected Swap to be of length 130, got %d", len(payload.Swap))

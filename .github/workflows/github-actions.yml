@@ -21,20 +21,20 @@ jobs:
             mingw-w64-${{ matrix.env }}-toolchain
             mingw-w64-${{ matrix.env }}-go
       - name: Build executables
-        env:
-          GOARCH: ${{ matrix.arch }}
-          CGO_ENABLED: 1
         shell: msys2 {0}
         run: |
           mkdir build
           ${{ matrix.env }}-w64-mingw32-gcc -o build/test-discon_${{ matrix.arch }}.dll test-discon/test-discon.c --shared -g
           ${{ matrix.env }}-w64-mingw32-gcc -o build/test-app_${{ matrix.arch }}.exe test-app/test-app.c -g
           go build -o build/discon-server_${{ matrix.arch }}.exe discon-wrapper/discon-server
-          go build -buildmode=c-shared -o build/discon-client_${{ matrix.arch }}.exe discon-wrapper/discon-client
+          go build -buildmode=c-shared -o build/discon-client_${{ matrix.arch }}.dll discon-wrapper/discon-client
       - uses: actions/upload-artifact@v4
         with:
           name: windows-binaries-${{ matrix.arch }}
           path: build/*
+      - name: Test discon-server
+        shell: msys2 {0}
+        run: go test discon-wrapper/discon-server
 
   # build-and-test-linux:
   #   runs-on: ubuntu-latest
