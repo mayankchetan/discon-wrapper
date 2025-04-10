@@ -12,7 +12,9 @@ jobs:
         with:
           update: true
           msystem: MINGW32
-          install: mingw-w64-i686-toolchain
+          install: |
+            mingw-w64-i686-toolchain
+            mingw-w64-i686-go
       - name: Build executables
         env:
           GOARCH: 386
