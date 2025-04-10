@@ -2,7 +2,12 @@ name: GitHub Actions
 
 on: [push]
 jobs:
-  build-windows-i686:
+  build-windows:
+    strategy:
+      matrix:
+        include:
+          - { sys: mingw64, env: x86_64, arch: amd64}
+          - { sys: mingw32, env: i686, arch: 386}
     runs-on: windows-latest
     steps:
       - name: Check out repository code
@@ -11,24 +16,24 @@ jobs:
         uses: msys2/setup-msys2@v2
         with:
           update: true
-          msystem: MINGW32
+          msystem: ${{ matrix.sys }}
           install: |
-            mingw-w64-i686-toolchain
-            mingw-w64-i686-go
+            mingw-w64-${{ matrix.env }}-toolchain
+            mingw-w64-${{ matrix.env }}-go
       - name: Build executables
         env:
-          GOARCH: 386
+          GOARCH: ${{ matrix.arch }}
           CGO_ENABLED: 1
         shell: msys2 {0}
         run: |
           mkdir build
-          i686-w64-mingw32-gcc -o build/test-discon.dll test-discon/test-discon.c --shared -g
-          i686-w64-mingw32-gcc -o build/test-app.exe test-app/test-app.c -g
-          go build -o build/discon-server.exe discon-wrapper/discon-server
-          go build -buildmode=c-shared -o build/discon-client.exe discon-wrapper/discon-client
+          ${{ matrix.env }}-w64-mingw32-gcc -o build/test-discon_${{ matrix.arch }}.dll test-discon/test-discon.c --shared -g
+          ${{ matrix.env }}-w64-mingw32-gcc -o build/test-app_${{ matrix.arch }}.exe test-app/test-app.c -g
+          go build -o build/discon-server_${{ matrix.arch }}.exe discon-wrapper/discon-server
+          go build -buildmode=c-shared -o build/discon-client_${{ matrix.arch }}.exe discon-wrapper/discon-client
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-binaries-i686
+          name: windows-binaries-${{ matrix.arch }}
           path: build/*
 
   # build-and-test-linux:
