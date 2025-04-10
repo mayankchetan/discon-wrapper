@@ -84,7 +84,7 @@ func init() {
 func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.char) {
 
 	// Get first 130 entries of swap array
-	swap := (*[1 << 30]float32)(unsafe.Pointer(avrSwap))
+	swap := (*[1 << 24]float32)(unsafe.Pointer(avrSwap))
 
 	// Get array sizes
 	swapSize := int(swap[128])   // Maximum size of swap array
@@ -106,9 +106,9 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 
 	payload.Swap = swap[:swapSize:swapSize]
 	payload.Fail = int32(*aviFail)
-	payload.InFile = (*[1 << 30]byte)(unsafe.Pointer(accInFile))[:inFileSize:inFileSize]
-	payload.OutName = (*[1 << 30]byte)(unsafe.Pointer(avcOutName))[:outNameSize:outNameSize]
-	payload.Msg = (*[1 << 30]byte)(unsafe.Pointer(avcMsg))[:msgSize:msgSize]
+	payload.InFile = (*[1 << 24]byte)(unsafe.Pointer(accInFile))[:inFileSize:inFileSize]
+	payload.OutName = (*[1 << 24]byte)(unsafe.Pointer(avcOutName))[:outNameSize:outNameSize]
+	payload.Msg = (*[1 << 24]byte)(unsafe.Pointer(avcMsg))[:msgSize:msgSize]
 
 	// Convert payload to binary and send over websocket
 	b, err := payload.MarshalBinary()
