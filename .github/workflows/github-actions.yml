@@ -2,34 +2,31 @@ name: GitHub Actions
 
 on: [push]
 jobs:
-  build-and-test-windows:
+  build-windows-i686:
     runs-on: windows-latest
-    strategy:
-      matrix:
-        include:
-          - { sys: mingw64, env: x86_64 , arch: amd64 }
-          - { sys: mingw32, env: i686, arch: 386 }
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         with:
-          msystem: ${{matrix.sys}}
+          update: true
+          msystem: MINGW32
+          install: mingw-w64-i686-toolchain
       - name: Build executables
         env:
-          GOARCH: ${{ matrix.arch }}
+          GOARCH: 386
           CGO_ENABLED: 1
         shell: msys2 {0}
         run: |
           mkdir build
-          gcc -o build/test-discon_${{ matrix.env }}.dll test-discon/test-discon.c --shared -g
-          gcc -o build/test-app_${{ matrix.env }}.exe test-app/test-app.c -g
-          go build -o build/discon-server_${{ matrix.env }}.exe discon-wrapper/discon-server
-          go build -buildmode=c-shared -o build/discon-client_${{ matrix.env }}.exe discon-wrapper/discon-client
+          i686-w64-mingw32-g -o build/test-discon.dll test-discon/test-discon.c --shared -g
+          i686-w64-mingw32-g -o build/test-app.exe test-app/test-app.c -g
+          go build -o build/discon-server.exe discon-wrapper/discon-server
+          go build -buildmode=c-shared -o build/discon-client.exe discon-wrapper/discon-client
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-binaries-${{ matrix.env }}
+          name: windows-binaries-i686
           path: build/*
 
   # build-and-test-linux:
