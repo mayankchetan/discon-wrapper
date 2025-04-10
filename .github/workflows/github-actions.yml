@@ -20,8 +20,8 @@ jobs:
         shell: msys2 {0}
         run: |
           mkdir build
-          i686-w64-mingw32-g -o build/test-discon.dll test-discon/test-discon.c --shared -g
-          i686-w64-mingw32-g -o build/test-app.exe test-app/test-app.c -g
+          i686-w64-mingw32-gcc -o build/test-discon.dll test-discon/test-discon.c --shared -g
+          i686-w64-mingw32-gcc -o build/test-app.exe test-app/test-app.c -g
           go build -o build/discon-server.exe discon-wrapper/discon-server
           go build -buildmode=c-shared -o build/discon-client.exe discon-wrapper/discon-client
       - uses: actions/upload-artifact@v4
