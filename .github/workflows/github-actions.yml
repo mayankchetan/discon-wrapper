@@ -40,9 +40,9 @@ jobs:
     strategy:
       matrix:
         include:
-          - { sys: macos-13, arch: intel}
-          - { sys: macos-latest, arch: arm64}
-    runs-on: windows-latest
+          - { os: macos-13, arch: intel}
+          - { os: macos-latest, arch: arm64}
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4
