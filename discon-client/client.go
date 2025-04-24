@@ -40,7 +40,7 @@ func init() {
 		}
 		recvSwapFile, err = os.Create(csvFileName + "_recv.csv")
 		if err != nil {
-			log.Fatal("discon-client: error creating sent swap file:", err)
+			log.Fatal("discon-client: error creating recv swap file:", err)
 		}
 	}
 
@@ -132,10 +132,11 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 
 	if debug {
 		log.Println("discon-client: sent payload:\n", payload)
-		for _, v := range payload.Swap[:163] {
+		outSwapSize := min(swapSize, 163)
+		for _, v := range payload.Swap[:outSwapSize-1] {
 			fmt.Fprintf(sentSwapFile, "%g,", v)
 		}
-		fmt.Fprintf(sentSwapFile, "%g\n", payload.Swap[163])
+		fmt.Fprintf(sentSwapFile, "%g\n", payload.Swap[outSwapSize-1])
 	}
 
 	// Read response from server
@@ -152,10 +153,11 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 
 	if debug {
 		log.Println("discon-client: received payload:\n", payload)
-		for _, v := range payload.Swap[:163] {
+		outSwapSize := min(swapSize, 163)
+		for _, v := range payload.Swap[:outSwapSize-1] {
 			fmt.Fprintf(recvSwapFile, "%g,", v)
 		}
-		fmt.Fprintf(recvSwapFile, "%g\n", payload.Swap[163])
+		fmt.Fprintf(recvSwapFile, "%g\n", payload.Swap[outSwapSize-1])
 	}
 
 	// Set fail flag
