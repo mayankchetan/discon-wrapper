@@ -120,10 +120,26 @@ func (p *Payload) UnmarshalBinary(data []byte) error {
 }
 
 func (p Payload) String() string {
+	i0InFile := bytes.IndexByte(p.InFile, 0)
+	if i0InFile < 0 {
+		i0InFile = len(p.InFile)
+	}
+	i0OutName := bytes.IndexByte(p.OutName, 0)
+	if i0OutName < 0 {
+		i0OutName = len(p.OutName)
+	}
+	i0Msg := bytes.IndexByte(p.Msg, 0)
+	if i0Msg < 0 {
+		i0Msg = len(p.Msg)
+	}
 	return fmt.Sprintf("avrSWAP: 	%v\n"+
 		"aviFAIL: 	%v\n"+
 		"accINFILE:  '%s'\n"+
 		"avcOUTNAME: '%s'\n"+
 		"avcMSG:     '%s'\n",
-		p.Swap[:129], p.Fail, p.InFile, p.OutName, p.Msg)
+		p.Swap[:129],
+		p.Fail,
+		p.InFile[:i0InFile],
+		p.OutName[:i0OutName],
+		p.Msg[:i0Msg])
 }

@@ -118,7 +118,7 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 	ws.WriteMessage(websocket.BinaryMessage, b)
 
 	if debug {
-		log.Println("discon-client: sent payload:", payload)
+		log.Println("discon-client: sent payload:\n", payload)
 	}
 
 	// Read response from server
@@ -134,7 +134,7 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 	}
 
 	if debug {
-		log.Println("discon-client: received payload:", payload)
+		log.Println("discon-client: received payload:\n", payload)
 	}
 
 	// Set fail flag
