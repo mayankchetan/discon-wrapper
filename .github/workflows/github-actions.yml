@@ -36,6 +36,26 @@ jobs:
       #   shell: msys2 {0}
       #   run: go test discon-wrapper/discon-server
 
+  build-macos:
+    strategy:
+      matrix:
+        include:
+          - { sys: macos-13, arch: intel}
+          - { sys: macos-latest, arch: arm64}
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+      - name: Build executables
+        run: |
+          mkdir build
+          go build -o build/discon-server_${{ matrix.arch }} discon-wrapper/discon-server
+          go build -buildmode=c-shared -o build/discon-client_${{ matrix.arch }}.dylib discon-wrapper/discon-client
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-binaries-${{ matrix.arch }}
+          path: build/*
+
   # build-and-test-linux:
   #   runs-on: ubuntu-latest
   #   steps:
