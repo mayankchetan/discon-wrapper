@@ -20,6 +20,8 @@ var debug = false
 
 var ws *websocket.Conn
 var payload dw.Payload
+var sentSwapFile *os.File
+var recvSwapFile *os.File
 
 func init() {
 
@@ -27,8 +29,19 @@ func init() {
 	fmt.Println("Loaded", program, version)
 
 	// Get debug flag from environment variable
-	if len(os.Getenv("DISCON_CLIENT_DEBUG")) > 0 {
-		debug = true
+	csvFileName := ""
+	csvFileName, debug = os.LookupEnv("DISCON_CLIENT_DEBUG")
+	if debug {
+		log.Println("discon-client: DISCON_CLIENT_DEBUG=", csvFileName)
+		var err error
+		sentSwapFile, err = os.Create(csvFileName + "_sent.csv")
+		if err != nil {
+			log.Fatal("discon-client: error creating sent swap file:", err)
+		}
+		recvSwapFile, err = os.Create(csvFileName + "_recv.csv")
+		if err != nil {
+			log.Fatal("discon-client: error creating sent swap file:", err)
+		}
 	}
 
 	// Get discon-server address from environment variable
@@ -119,6 +132,10 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 
 	if debug {
 		log.Println("discon-client: sent payload:\n", payload)
+		for _, v := range payload.Swap[:163] {
+			fmt.Fprintf(sentSwapFile, "%g,", v)
+		}
+		fmt.Fprintf(sentSwapFile, "%g\n", payload.Swap[163])
 	}
 
 	// Read response from server
@@ -135,6 +152,10 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 
 	if debug {
 		log.Println("discon-client: received payload:\n", payload)
+		for _, v := range payload.Swap[:163] {
+			fmt.Fprintf(recvSwapFile, "%g,", v)
+		}
+		fmt.Fprintf(recvSwapFile, "%g\n", payload.Swap[163])
 	}
 
 	// Set fail flag
