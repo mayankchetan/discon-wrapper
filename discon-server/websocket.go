@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/gorilla/websocket"
@@ -36,7 +37,7 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
 	// Get unique identifier for this connection
 	connID := connectionID.Add(1)
 
-	// Read library path and function name from post parameters
+	// Read controller path and function name from post parameters
 	params, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
 		http.Error(w, "Error parsing url parameters: "+err.Error(), http.StatusInternalServerError)
@@ -46,13 +47,13 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
 	proc := params.Get("proc")
 
 	if debug {
-		log.Printf("Received request to load function '%s' from shared library '%s'\n", proc, path)
+		log.Printf("Received request to load function '%s' from shared controller '%s'\n", proc, path)
 	}
 
-	// Check if library exists at path
+	// Check if controller exists at path
 	_, err = os.Stat(path)
 	if os.IsNotExist(err) {
-		http.Error(w, "Library not found at '"+path+"'", http.StatusInternalServerError)
+		http.Error(w, "Controller not found at '"+path+"'", http.StatusInternalServerError)
 		return
 	}
 
@@ -60,10 +61,14 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
 	// of the same library can be shared at the same time
 	tmpPath, err := duplicateLibrary(path, connID)
 	if err != nil {
-		http.Error(w, "Error duplicating library: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Error duplicating controller: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer os.Remove(tmpPath)
+
+	if debug {
+		log.Printf("Duplicated controller to '%s'\n", tmpPath)
+	}
 
 	// Load the shared library
 	libraryPath := C.CString(tmpPath)
@@ -97,6 +102,14 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
 	// Loop while receiving messages over socket
 	for {
 
+		// If not debug, set read deadline to 5 seconds
+		// This will disconnect the client if no message is received in 5 seconds
+		// which allows the controller to be unloaded and deleted
+		if !debug {
+			ws.SetReadDeadline(time.Now().Add(time.Second * 5))
+		}
+
+		// Read message from websocket
 		messageType, b, err := ws.ReadMessage()
 		if err != nil {
 			log.Println("read:", err)
