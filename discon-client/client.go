@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"strconv"
 	"unsafe"
 
 	"github.com/gorilla/websocket"
@@ -16,7 +17,7 @@ import (
 const program = "discon-client"
 const version = "v0.1.0"
 
-var debug = false
+var debugLevel int = 0
 
 var ws *websocket.Conn
 var payload dw.Payload
@@ -29,18 +30,27 @@ func init() {
 	fmt.Println("Loaded", program, version)
 
 	// Get debug flag from environment variable
-	csvFileName := ""
-	csvFileName, debug = os.LookupEnv("DISCON_CLIENT_DEBUG")
+	csvFileName := "discon_swap"
+	debugStr, debug := os.LookupEnv("DISCON_CLIENT_DEBUG")
 	if debug {
-		log.Println("discon-client: DISCON_CLIENT_DEBUG=", csvFileName)
 		var err error
-		sentSwapFile, err = os.Create(csvFileName + "_sent.csv")
+		debugLevel, err = strconv.Atoi(debugStr)
 		if err != nil {
-			log.Fatal("discon-client: error creating sent swap file:", err)
+			// If not a number, treat as filename and set debug level to 1
+			csvFileName = debugStr
+			debugLevel = 1
 		}
-		recvSwapFile, err = os.Create(csvFileName + "_recv.csv")
-		if err != nil {
-			log.Fatal("discon-client: error creating recv swap file:", err)
+
+		// Only create log files if debugLevel > 0
+		if debugLevel > 0 {
+			sentSwapFile, err = os.Create(csvFileName + "_sent.csv")
+			if err != nil {
+				log.Fatal("discon-client: error creating sent swap file:", err)
+			}
+			recvSwapFile, err = os.Create(csvFileName + "_recv.csv")
+			if err != nil {
+				log.Fatal("discon-client: error creating recv swap file:", err)
+			}
 		}
 	}
 
@@ -62,11 +72,11 @@ func init() {
 		log.Fatal("discon-client: environment variable DISCON_LIB_PROC not set (e.g. 'discon')")
 	}
 
-	if debug {
+	if debugLevel >= 1 {
 		log.Println("discon-client: DISCON_SERVER_ADDR=", serverAddr)
 		log.Println("discon-client: DISCON_LIB_PATH=", disconPath)
 		log.Println("discon-client: DISCON_LIB_PROC=", disconFunc)
-		log.Println("discon-client: DISCON_CLIENT_DEBUG=", debug)
+		log.Println("discon-client: DISCON_CLIENT_DEBUG=", debugLevel)
 	}
 
 	// Create a URL object
@@ -78,7 +88,7 @@ func init() {
 	// Add query parameters for shared library path and proc
 	u.RawQuery = url.Values{"path": {disconPath}, "proc": {disconFunc}}.Encode()
 
-	if debug {
+	if debugLevel >= 1 {
 		log.Printf("discon-client: connecting to discon-server at '%s'\n", u.String())
 	}
 
@@ -88,8 +98,8 @@ func init() {
 		log.Fatalf("discon-client: error connecting to discon-server at %s: %s", serverAddr, err)
 	}
 
-	if debug {
-		log.Printf("discon-client: Connecting to discon-server at '%s'\n", u.String())
+	if debugLevel >= 1 {
+		log.Printf("discon-client: Connected to discon-server at '%s'\n", u.String())
 	}
 }
 
@@ -110,7 +120,7 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 		payload.Swap = make([]float32, swapSize)
 	}
 
-	if debug {
+	if debugLevel >= 2 {
 		log.Printf("discon-client: size of avrSWAP:    % 5d\n", swapSize)
 		log.Printf("discon-client: size of accINFILE:  % 5d\n", inFileSize)
 		log.Printf("discon-client: size of avcOUTNAME: % 5d\n", outNameSize)
@@ -130,8 +140,11 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 	}
 	ws.WriteMessage(websocket.BinaryMessage, b)
 
-	if debug {
+	if debugLevel >= 2 {
 		log.Println("discon-client: sent payload:\n", payload)
+	}
+
+	if debugLevel >= 1 && sentSwapFile != nil {
 		outSwapSize := min(swapSize, 163)
 		for _, v := range payload.Swap[:outSwapSize-1] {
 			fmt.Fprintf(sentSwapFile, "%g,", v)
@@ -151,8 +164,11 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 		log.Fatalf("discon-client: %s", err)
 	}
 
-	if debug {
+	if debugLevel >= 2 {
 		log.Println("discon-client: received payload:\n", payload)
+	}
+
+	if debugLevel >= 1 && recvSwapFile != nil {
 		outSwapSize := min(swapSize, 163)
 		for _, v := range payload.Swap[:outSwapSize-1] {
 			fmt.Fprintf(recvSwapFile, "%g,", v)
