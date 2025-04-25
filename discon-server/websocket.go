@@ -1,9 +1,15 @@
 package main
 
 // #include <stdlib.h>
-// int load_shared_library(const char* library_path, const char* function_name);
-// void unload_shared_library();
-// void discon(float* avrSWAP, int* aviFAIL, char* accINFILE, char* avcOUTNAME, char* avcMSG);
+// typedef struct {
+//     void* library_handle;
+//     void* function_handle;
+// } LibraryContext;
+// LibraryContext* create_library_context();
+// int load_shared_library_with_context(LibraryContext* context, const char* library_path, const char* function_name);
+// void discon_with_context(LibraryContext* context, float* avrSWAP, int* aviFAIL, char* accINFILE, char* avcOUTNAME, char* avcMSG);
+// void unload_shared_library_with_context(LibraryContext* context);
+// void free_library_context(LibraryContext* context);
 import "C"
 import (
 	dw "discon-wrapper"
@@ -70,17 +76,29 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
 		log.Printf("Duplicated controller to '%s'\n", tmpPath)
 	}
 
-	// Load the shared library
+	// Create a library context for this connection
+	libContext := C.create_library_context()
+	if libContext == nil {
+		http.Error(w, "Error creating library context", http.StatusInternalServerError)
+		return
+	}
+	// Ensure the library context is freed when we're done
+	defer C.free_library_context(libContext)
+
+	// Load the shared library into this connection's context
 	libraryPath := C.CString(tmpPath)
 	defer C.free(unsafe.Pointer(libraryPath))
 	functionName := C.CString(proc)
 	defer C.free(unsafe.Pointer(functionName))
-	status := C.load_shared_library(libraryPath, functionName)
+	status := C.load_shared_library_with_context(libContext, libraryPath, functionName)
 	if status == 1 {
 		http.Error(w, "Error loading shared library", http.StatusInternalServerError)
 		return
 	} else if status == 2 {
 		http.Error(w, "Error loading function from shared library", http.StatusInternalServerError)
+		return
+	} else if status == 3 {
+		http.Error(w, "Invalid library context", http.StatusInternalServerError)
 		return
 	}
 
@@ -131,8 +149,9 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
 			log.Println("discon-server: received payload:", payload)
 		}
 
-		// Call the function from the shared library with data in payload
-		C.discon(
+		// Call the function from the shared library with data in payload using this connection's context
+		C.discon_with_context(
+			libContext,
 			(*C.float)(unsafe.Pointer(&payload.Swap[0])),
 			(*C.int)(unsafe.Pointer(&payload.Fail)),
 			(*C.char)(unsafe.Pointer(&payload.InFile[0])),
@@ -156,8 +175,8 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
 		}
 	}
 
-	// Unload the shared library
-	C.unload_shared_library()
+	// Unload the shared library for this connection
+	C.unload_shared_library_with_context(libContext)
 }
 
 func duplicateLibrary(path string, connID uint64) (string, error) {
