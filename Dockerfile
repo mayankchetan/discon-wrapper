@@ -40,6 +40,6 @@ ENTRYPOINT ["/usr/local/bin/discon-server"]
 CMD ["--port=8080"]
 
 # Add labels
-LABEL maintainer="NREL"
+LABEL maintainer="Derek Slaughter"
 LABEL description="DISCON-Wrapper server for bridging 64-bit OpenFAST with 32-bit controllers"
 LABEL version="v0.1.0"
