@@ -84,7 +84,7 @@ int main()
     avrSWAP[48] = (float)CHAR_ARRAY_SIZE;
 
     // Call the DISCON function in a loop
-    for (int i = 1; i < 10; i++)
+    for (int i = 1; i < 1000; i++)
     {
         printf("test-app: calling DISCON, iteration %d\n", i);
         DISCON(avrSWAP, &aviFAIL, accINFILE, avcOUTNAME, avcMSG);

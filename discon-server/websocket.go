@@ -1,9 +1,9 @@
 package main
 
 // #include <stdlib.h>
-// int load_shared_library(const char* library_path, const char* function_name);
-// void unload_shared_library();
-// void discon(float* avrSWAP, int* aviFAIL, char* accINFILE, char* avcOUTNAME, char* avcMSG);
+// void discon(int connID, float* avrSWAP, int* aviFAIL, char* accINFILE, char* avcOUTNAME, char* avcMSG);
+// int load_shared_library(int connID, const char* library_path, const char* function_name);
+// void unload_shared_library(int connID);
 import "C"
 import (
 	dw "discon-wrapper"
@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -25,7 +24,10 @@ import (
 var upgrader = websocket.Upgrader{}
 
 // Unique identifier for the websocket connection
-var connectionID atomic.Uint64
+var connectionID int32
+
+// Mutex to protect the connectionID variable
+var connectionIDMutex sync.Mutex
 
 // WaitGroup to wait for all goroutines to finish
 var wg sync.WaitGroup
@@ -35,7 +37,13 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
 	defer wg.Done()
 
 	// Get unique identifier for this connection
-	connID := connectionID.Add(1)
+	connectionIDMutex.Lock()
+	connID := connectionID
+	connectionID++
+	if connectionID > 8191 {
+		connectionID = 0
+	}
+	connectionIDMutex.Unlock()
 
 	// Read controller path and function name from post parameters
 	params, err := url.ParseQuery(r.URL.RawQuery)
@@ -75,7 +83,7 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
 	defer C.free(unsafe.Pointer(libraryPath))
 	functionName := C.CString(proc)
 	defer C.free(unsafe.Pointer(functionName))
-	status := C.load_shared_library(libraryPath, functionName)
+	status := C.load_shared_library(C.int(connID), libraryPath, functionName)
 	if status == 1 {
 		http.Error(w, "Error loading shared library", http.StatusInternalServerError)
 		return
@@ -132,7 +140,7 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
 		}
 
 		// Call the function from the shared library with data in payload
-		C.discon(
+		C.discon(C.int(connID),
 			(*C.float)(unsafe.Pointer(&payload.Swap[0])),
 			(*C.int)(unsafe.Pointer(&payload.Fail)),
 			(*C.char)(unsafe.Pointer(&payload.InFile[0])),
@@ -157,10 +165,10 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
 	}
 
 	// Unload the shared library
-	C.unload_shared_library()
+	C.unload_shared_library(C.int(connID))
 }
 
-func duplicateLibrary(path string, connID uint64) (string, error) {
+func duplicateLibrary(path string, connID int32) (string, error) {
 	// Create a copy of the shared library with a number suffix so multiple instances
 	// of the same library can be shared at the same time
 	outFile, err := os.CreateTemp(".", fmt.Sprintf("%s-%03d-", filepath.Base(path), connID))
