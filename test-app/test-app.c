@@ -11,7 +11,7 @@ typedef void (*DISCON_FUNC)(float *avrSWAP, int *aviFAIL, char *accINFILE, char 
 #endif
 
 // Length of the swap array
-#define SWAP_ARRAY_SIZE 130
+#define SWAP_ARRAY_SIZE 164
 
 // Length of the character arrays
 #define CHAR_ARRAY_SIZE 32
