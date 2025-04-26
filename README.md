@@ -24,7 +24,12 @@ There's not a lot to configure, but you're bridging two applications, so things 
 
 ### Server
 
-Download `discon-server_386.exe` from [Releases](https://github.com/deslaughter/discon-wrapper/releases) and put it in the same directory as the Controller shared library. Start the server from the command line by running `discon-server_amd64.exe --port=8080 --debug`. The `port` argument specifies which port on your computer it will listen to for client connections. This can be any 4-5 digit number that is not already in use by the operating system. If it returns an error, try a different number. The `debug` argument enables debug output which will be helpful for checking that it's working, but should be turned off when running simulations. 
+Download `discon-server_386.exe` from [Releases](https://github.com/deslaughter/discon-wrapper/releases) and put it in the same directory as the Controller shared library. Start the server from the command line by running `discon-server_amd64.exe --port=8080 --debug=1`. The `port` argument specifies which port on your computer it will listen to for client connections. This can be any 4-5 digit number that is not already in use by the operating system. If it returns an error, try a different number. 
+
+The `debug` argument now accepts a level (0, 1, or 2):
+- `0`: No debug output (default)
+- `1`: Basic debug information
+- `2`: Verbose debug output including full payloads
 
 That's it for the server configuration. It doesn't load the controller until the client makes a connection because the client has to tell it what to load, more on that in the next section. 
 
@@ -63,12 +68,27 @@ openfast.exe my_turbine.fst
 
 You can see that the environment variable settings correspond to the original controller settings that were in the ServoDyn input file.
 
+## Client-Side Input Files
+
+DISCON-Wrapper now supports input files located on the client side. When a controller asks for an input file (such as DISCON.IN), the client will:
+
+1. Check if the file exists locally
+2. If found, automatically transfer the file to the server before the controller is called
+3. Update the file path that's passed to the controller on the server side
+
+This means you can now keep your input files on the client machine and don't need to manually copy them to the server. The file transfer happens automatically and transparently.
+
+Benefits:
+- No need to copy input files to the server
+- Files are transferred only once during a simulation
+- Files are automatically cleaned up when the connection closes
+
 ## Running
 
 For simplicity, put the OpenFAST input files, controller shared library, `discon-server_386.exe`, and `discon-client_amd64.dll` into a directory. Open two command prompts, one for running the server, and the other for running OpenFAST. Start the server by running the following in one command prompt
 
 ```
-discon-server_amd64.exe --port=8080 --debug
+discon-server_amd64.exe --port=8080 --debug=1
 ```
 
 Switch to the second command prompt, specify the environment variables, and run OpenFAST:
@@ -83,4 +103,4 @@ openfast.exe my_turbine.fst
 
 If everything is configured properly, the simulation should proceed as though OpenFAST had loaded the controller directly. Remember, that the server must be started before running the simulation because the client will attempt to connect when it is loaded. Once the simulation stops, the client will disconnect. The server is will continue running and wait for new connections so you can run more simulations. To stop the server, switch to the command prompt, and close it or press `CTRL+C` to kill the server.
 
-You may see a temporary copy of the controller while the simulation is running. This is done so the server can load multiple copies of the controller at once, supporting multiple concurrent OpenFAST simulations. If they aren't automatically removed by the server, they can be deleted manually once the server has been stopped.
+You may see temporary files created while the simulation is running. These include a copy of the controller and any transferred input files. They are automatically cleaned up when the connection closes, but if they aren't removed for some reason, they can be deleted manually once the server has been stopped.
