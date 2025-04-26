@@ -6,7 +6,9 @@ package main
 // void unload_shared_library(int connID);
 import "C"
 import (
+	"crypto/sha256"
 	dw "discon-wrapper"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
@@ -14,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -32,7 +35,110 @@ var connectionIDMutex sync.Mutex
 // WaitGroup to wait for all goroutines to finish
 var wg sync.WaitGroup
 
-func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
+// GH-Cp gen: Map of temporary files created for each connection
+var tempFiles = make(map[int32][]string)
+var tempFilesMutex sync.Mutex
+
+// GH-Cp gen: Function to check if data is a file transfer
+func isFileTransfer(payload *dw.Payload) bool {
+	return len(payload.FileContent) > 0 && len(payload.ServerFilePath) > 0
+}
+
+// GH-Cp gen: Function to validate filename for security
+func validateFileName(filename string) error {
+	// Remove null terminators
+	filename = strings.ReplaceAll(filename, "\x00", "")
+
+	// Check if filename contains suspicious patterns
+	suspiciousPatterns := []string{"../", "/..", "~", "$", "|", ";", "&", "\\"}
+	for _, pattern := range suspiciousPatterns {
+		if strings.Contains(filename, pattern) {
+			return fmt.Errorf("filename contains invalid pattern: %s", pattern)
+		}
+	}
+
+	// Ensure filename is just a basename, not a path
+	if filepath.Base(filename) != filename {
+		return fmt.Errorf("filename must not contain path separators")
+	}
+
+	return nil
+}
+
+// GH-Cp gen: Handle file transfer from client to server
+func handleFileTransfer(connID int32, payload *dw.Payload, debugLevel int) (*dw.Payload, error) {
+	// Initialize response payload
+	response := dw.Payload{
+		Swap:    make([]float32, 1),
+		Fail:    0,
+		InFile:  []byte{0},
+		OutName: []byte{0},
+		Msg:     make([]byte, 256), // Reserve space for error message
+	}
+
+	// Get server file path from payload
+	serverFilePath := string(payload.ServerFilePath)
+	nullIndex := strings.IndexByte(serverFilePath, 0)
+	if nullIndex >= 0 {
+		serverFilePath = serverFilePath[:nullIndex]
+	}
+
+	// Validate filename for security
+	err := validateFileName(serverFilePath)
+	if err != nil {
+		response.Fail = 1
+		errMsg := fmt.Sprintf("Security error: %v", err)
+		copy(response.Msg, []byte(errMsg+"\x00"))
+		return &response, fmt.Errorf("file validation error: %w", err)
+	}
+
+	// Verify file contents with hash
+	hash := sha256.New()
+	hash.Write(payload.FileContent)
+	contentHash := hex.EncodeToString(hash.Sum(nil))
+
+	if debugLevel >= 1 {
+		log.Printf("Received file transfer request for %s (size: %d bytes, hash: %s)",
+			serverFilePath, len(payload.FileContent), contentHash[:8])
+	}
+
+	// Create the file with the server file path
+	file, err := os.Create(serverFilePath)
+	if err != nil {
+		response.Fail = 1
+		errMsg := fmt.Sprintf("Failed to create file: %v", err)
+		copy(response.Msg, []byte(errMsg+"\x00"))
+		return &response, fmt.Errorf("failed to create file: %w", err)
+	}
+	defer file.Close()
+
+	// Write the file contents
+	_, err = file.Write(payload.FileContent)
+	if err != nil {
+		response.Fail = 1
+		errMsg := fmt.Sprintf("Failed to write file: %v", err)
+		copy(response.Msg, []byte(errMsg+"\x00"))
+		os.Remove(serverFilePath) // Clean up the partial file
+		return &response, fmt.Errorf("failed to write file: %w", err)
+	}
+
+	// Register the file to be cleaned up when the connection closes
+	tempFilesMutex.Lock()
+	tempFiles[connID] = append(tempFiles[connID], serverFilePath)
+	tempFilesMutex.Unlock()
+
+	if debugLevel >= 1 {
+		log.Printf("File %s created successfully", serverFilePath)
+	}
+
+	// Set success message
+	successMsg := fmt.Sprintf("File transferred successfully: %s", serverFilePath)
+	copy(response.Msg, []byte(successMsg+"\x00"))
+
+	return &response, nil
+}
+
+func ServeWs(w http.ResponseWriter, r *http.Request, debugLevel int) {
 	wg.Add(1)
 	defer wg.Done()
 
@@ -54,7 +160,7 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
 	path := params.Get("path")
 	proc := params.Get("proc")
 
-	if debug {
+	if debugLevel >= 1 {
 		log.Printf("Received request to load function '%s' from shared controller '%s'\n", proc, path)
 	}
 
@@ -74,9 +180,30 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
 	}
 	defer os.Remove(tmpPath)
 
-	if debug {
+	if debugLevel >= 1 {
 		log.Printf("Duplicated controller to '%s'\n", tmpPath)
 	}
+
+	// GH-Cp gen: Initialize tempFiles entry for this connection
+	tempFilesMutex.Lock()
+	tempFiles[connID] = make([]string, 0)
+	tempFilesMutex.Unlock()
+
+	// GH-Cp gen: Clean up any temporary files when connection closes
+	defer func() {
+		tempFilesMutex.Lock()
+		fileList := tempFiles[connID]
+		delete(tempFiles, connID)
+		tempFilesMutex.Unlock()
+
+		// Remove all temporary files for this connection
+		for _, filePath := range fileList {
+			if debugLevel >= 1 {
+				log.Printf("Cleaning up temporary file: %s", filePath)
+			}
+			os.Remove(filePath)
+		}
+	}()
 
 	// Load the shared library
 	libraryPath := C.CString(tmpPath)
@@ -92,7 +219,7 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
 		return
 	}
 
-	if debug {
+	if debugLevel >= 1 {
 		log.Printf("Library and function loaded successfully\n")
 	}
 
@@ -110,10 +237,10 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
 	// Loop while receiving messages over socket
 	for {
 
-		// If not debug, set read deadline to 5 seconds
+		// If not in debug mode, set read deadline to 5 seconds
 		// This will disconnect the client if no message is received in 5 seconds
 		// which allows the controller to be unloaded and deleted
-		if !debug {
+		if debugLevel == 0 {
 			ws.SetReadDeadline(time.Now().Add(time.Second * 5))
 		}
 
@@ -135,8 +262,36 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
 			break
 		}
 
-		if debug {
+		// GH-Cp gen: Only log full payload at debug level 2
+		if debugLevel >= 2 {
 			log.Println("discon-server: received payload:", payload)
+			// } else if debugLevel == 1 {
+			// 	// At level 1, just log basic info without full payload details
+			// 	inFilePath := string(payload.InFile)
+			// 	nullIndex := strings.IndexByte(inFilePath, 0)
+			// 	if nullIndex >= 0 {
+			// 		inFilePath = inFilePath[:nullIndex]
+			// 	}
+			// 	log.Printf("discon-server: received request with InFile: %s", inFilePath)
+		}
+
+		// GH-Cp gen: Check if the payload is a file transfer
+		if isFileTransfer(&payload) {
+			response, err := handleFileTransfer(connID, &payload, debugLevel)
+			if err != nil {
+				log.Println("handleFileTransfer:", err)
+			}
+			b, err = response.MarshalBinary()
+			if err != nil {
+				log.Println("response.MarshalBinary:", err)
+				break
+			}
+			err = ws.WriteMessage(websocket.BinaryMessage, b)
+			if err != nil {
+				log.Println("write:", err)
+				break
+			}
+			continue
 		}
 
 		// Call the function from the shared library with data in payload
@@ -159,8 +314,12 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debug bool) {
 			break
 		}
 
-		if debug {
-			fmt.Println("discon-server: sent payload:", payload)
+		// GH-Cp gen: Only log full response at debug level 2
+		if debugLevel >= 2 {
+			log.Println("discon-server: sent payload:", payload)
+			// } else if debugLevel == 1 {
+			// 	// At level 1, just log that response was sent
+			// 	log.Println("discon-server: sent response")
 		}
 	}
 

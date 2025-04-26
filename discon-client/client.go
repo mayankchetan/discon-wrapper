@@ -3,12 +3,17 @@ package main
 import "C"
 
 import (
+	"crypto/sha256"
 	dw "discon-wrapper"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"log"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"unsafe"
 
 	"github.com/gorilla/websocket"
@@ -23,6 +28,124 @@ var ws *websocket.Conn
 var payload dw.Payload
 var sentSwapFile *os.File
 var recvSwapFile *os.File
+
+// GH-Cp gen: Map to store server-side file paths for transferred files
+var serverFilePaths = make(map[string]string)
+
+// GH-Cp gen: Function to check if a file exists
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
+}
+
+// GH-Cp gen: Function to read file contents
+func readFileContents(filePath string) ([]byte, error) {
+	if !fileExists(filePath) {
+		return nil, fmt.Errorf("file does not exist: %s", filePath)
+	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("error opening file: %w", err)
+	}
+	defer file.Close()
+
+	content, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("error reading file: %w", err)
+	}
+
+	return content, nil
+}
+
+// GH-Cp gen: Function to send file to server and get server path
+func sendFileToServer(filePath string) (string, error) {
+	// Check if we've already sent this file
+	if serverPath, exists := serverFilePaths[filePath]; exists {
+		// if debugLevel >= 1 {
+		// 	log.Printf("discon-client: Using cached server path for %s: %s", filePath, serverPath)
+		// }
+		return serverPath, nil
+	}
+
+	// Read the file contents
+	content, err := readFileContents(filePath)
+	if err != nil {
+		return "", err
+	}
+
+	// Create a unique filename using SHA-256 hash of content and original filename
+	hash := sha256.New()
+	hash.Write(content)
+	hash.Write([]byte(filepath.Base(filePath)))
+	hashString := hex.EncodeToString(hash.Sum(nil))
+
+	// Generate a server path - use just the filename with a unique prefix
+	serverPath := fmt.Sprintf("input_%s_%s", hashString[:8], filepath.Base(filePath))
+
+	// Create a file transfer payload
+	fileTransferPayload := dw.Payload{
+		// Initialize required fields with empty values
+		Swap:           make([]float32, 1),
+		Fail:           0,
+		InFile:         []byte{0},
+		OutName:        []byte{0},
+		Msg:            []byte{0},
+		FileContent:    content,
+		ServerFilePath: []byte(serverPath + "\x00"),
+	}
+
+	if debugLevel >= 1 {
+		log.Printf("discon-client: Sending file %s to server (size: %d bytes)", filePath, len(content))
+	}
+
+	// Send the file transfer payload to the server
+	b, err := fileTransferPayload.MarshalBinary()
+	if err != nil {
+		return "", fmt.Errorf("error marshaling file transfer payload: %w", err)
+	}
+
+	err = ws.WriteMessage(websocket.BinaryMessage, b)
+	if err != nil {
+		return "", fmt.Errorf("error sending file to server: %w", err)
+	}
+
+	// Wait for server response
+	_, resp, err := ws.ReadMessage()
+	if err != nil {
+		return "", fmt.Errorf("error receiving server response: %w", err)
+	}
+
+	// Unmarshal the response
+	var responsePayload dw.Payload
+	err = responsePayload.UnmarshalBinary(resp)
+	if err != nil {
+		return "", fmt.Errorf("error unmarshaling server response: %w", err)
+	}
+
+	// Check if the file transfer succeeded
+	if responsePayload.Fail != 0 {
+		// Get the error message from the Msg field
+		errMsg := string(responsePayload.Msg)
+		i0 := strings.IndexByte(errMsg, 0)
+		if i0 >= 0 {
+			errMsg = errMsg[:i0]
+		}
+		return "", fmt.Errorf("file transfer failed: %s", errMsg)
+	}
+
+	// Store the server path for future use
+	serverFilePaths[filePath] = serverPath
+
+	if debugLevel >= 1 {
+		log.Printf("discon-client: File %s transferred successfully to server at %s", filePath, serverPath)
+	}
+
+	return serverPath, nil
+}
 
 func init() {
 
@@ -127,11 +250,58 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 		log.Printf("discon-client: size of avcMSG:     % 5d\n", msgSize)
 	}
 
+	// GH-Cp gen: Get the input file path from accInFile
+	inFilePath := string((*[1 << 24]byte)(unsafe.Pointer(accInFile))[:inFileSize-1]) // -1 to exclude null terminator
+
+	// GH-Cp gen: Check if the input file exists locally and transfer it to server if needed
+	if fileExists(inFilePath) {
+		// if debugLevel >= 2 {
+		// 	log.Printf("discon-client: Input file found locally: %s", inFilePath)
+		// }
+
+		// Transfer file to server and get the server-side path
+		serverPath, err := sendFileToServer(inFilePath)
+		if err != nil {
+			log.Printf("discon-client: Error transferring file %s: %v", inFilePath, err)
+			// Set failure flag
+			*aviFail = C.int(1)
+			// Set error message
+			errMsg := fmt.Sprintf("File transfer failed: %v", err)
+			copy((*[1 << 24]byte)(unsafe.Pointer(avcMsg))[:msgSize], []byte(errMsg))
+			return
+		}
+
+		// GH-Cp gen: Update the InFile field in payload with the server-side path
+		// First, create a new byte slice with the modified path
+		serverPathBytes := []byte(serverPath + "\x00")
+
+		// Copy to payload.InFile
+		payload.InFile = serverPathBytes
+
+		// Update the inFileSize in the swap array
+		swap[49] = float32(len(serverPathBytes))
+
+		// if debugLevel >= 1 {
+		// 	log.Printf("discon-client: Using server path for input file: %s", serverPath)
+		// }
+	} else if debugLevel >= 1 {
+		// Log if file doesn't exist but continue with normal operation
+		log.Printf("discon-client: Input file not found locally: %s, continuing with original path", inFilePath)
+		payload.InFile = (*[1 << 24]byte)(unsafe.Pointer(accInFile))[:inFileSize:inFileSize]
+	} else {
+		// Normal operation if no debug info
+		payload.InFile = (*[1 << 24]byte)(unsafe.Pointer(accInFile))[:inFileSize:inFileSize]
+	}
+
+	// Fill the rest of the payload
 	payload.Swap = swap[:swapSize:swapSize]
 	payload.Fail = int32(*aviFail)
-	payload.InFile = (*[1 << 24]byte)(unsafe.Pointer(accInFile))[:inFileSize:inFileSize]
 	payload.OutName = (*[1 << 24]byte)(unsafe.Pointer(avcOutName))[:outNameSize:outNameSize]
 	payload.Msg = (*[1 << 24]byte)(unsafe.Pointer(avcMsg))[:msgSize:msgSize]
+
+	// Reset file transfer fields to avoid sending unnecessary data
+	payload.FileContent = nil
+	payload.ServerFilePath = nil
 
 	// Convert payload to binary and send over websocket
 	b, err := payload.MarshalBinary()
