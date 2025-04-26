@@ -34,6 +34,11 @@ var serverFilePaths = make(map[string]string)
 
 // GH-Cp gen: Function to check if a file exists
 func fileExists(filename string) bool {
+	// GH-Cp gen: Added nil/empty check to prevent segmentation fault
+	if filename == "" {
+		return false
+	}
+
 	info, err := os.Stat(filename)
 	if os.IsNotExist(err) {
 		return false
@@ -228,7 +233,6 @@ func init() {
 
 //export DISCON
 func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.char) {
-
 	// Get first 130 entries of swap array
 	swap := (*[1 << 24]float32)(unsafe.Pointer(avrSwap))
 
@@ -250,14 +254,24 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 		log.Printf("discon-client: size of avcMSG:     % 5d\n", msgSize)
 	}
 
-	// GH-Cp gen: Get the input file path from accInFile
-	inFilePath := string((*[1 << 24]byte)(unsafe.Pointer(accInFile))[:inFileSize-1]) // -1 to exclude null terminator
+	// GH-Cp gen: Get the input file path from accInFile with safer handling
+	var inFilePath string
+	if accInFile != nil && inFileSize > 0 {
+		// Safely get the file path - ensure we don't read past the end of the array
+		safeSize := inFileSize
+		if safeSize > 1 {
+			safeSize-- // -1 to exclude null terminator if present
+		}
+		inFilePath = string((*[1 << 24]byte)(unsafe.Pointer(accInFile))[:safeSize])
+		// Remove any null terminators from the end of the string
+		inFilePath = strings.TrimRight(inFilePath, "\x00")
+	}
 
 	// GH-Cp gen: Check if the input file exists locally and transfer it to server if needed
-	if fileExists(inFilePath) {
-		// if debugLevel >= 2 {
-		// 	log.Printf("discon-client: Input file found locally: %s", inFilePath)
-		// }
+	if inFilePath != "" && fileExists(inFilePath) {
+		if debugLevel >= 2 {
+			log.Printf("discon-client: Input file found locally: %s", inFilePath)
+		}
 
 		// Transfer file to server and get the server-side path
 		serverPath, err := sendFileToServer(inFilePath)
@@ -281,23 +295,38 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 		// Update the inFileSize in the swap array
 		swap[49] = float32(len(serverPathBytes))
 
-		// if debugLevel >= 1 {
-		// 	log.Printf("discon-client: Using server path for input file: %s", serverPath)
-		// }
-	} else if debugLevel >= 1 {
-		// Log if file doesn't exist but continue with normal operation
-		log.Printf("discon-client: Input file not found locally: %s, continuing with original path", inFilePath)
-		payload.InFile = (*[1 << 24]byte)(unsafe.Pointer(accInFile))[:inFileSize:inFileSize]
+		if debugLevel >= 2 {
+			log.Printf("discon-client: Using server path for input file: %s", serverPath)
+		}
 	} else {
-		// Normal operation if no debug info
-		payload.InFile = (*[1 << 24]byte)(unsafe.Pointer(accInFile))[:inFileSize:inFileSize]
+		// Handle original path - with safety checks
+		if accInFile != nil && inFileSize > 0 {
+			if debugLevel >= 1 && inFilePath != "" {
+				log.Printf("discon-client: Input file not found locally: %s, continuing with original path", inFilePath)
+			}
+			payload.InFile = (*[1 << 24]byte)(unsafe.Pointer(accInFile))[:inFileSize:inFileSize]
+		} else {
+			// Ensure we have at least an empty byte array with a null terminator
+			payload.InFile = []byte{0}
+		}
 	}
 
 	// Fill the rest of the payload
 	payload.Swap = swap[:swapSize:swapSize]
 	payload.Fail = int32(*aviFail)
-	payload.OutName = (*[1 << 24]byte)(unsafe.Pointer(avcOutName))[:outNameSize:outNameSize]
-	payload.Msg = (*[1 << 24]byte)(unsafe.Pointer(avcMsg))[:msgSize:msgSize]
+
+	// Safely handle output name and message with null checks
+	if avcOutName != nil && outNameSize > 0 {
+		payload.OutName = (*[1 << 24]byte)(unsafe.Pointer(avcOutName))[:outNameSize:outNameSize]
+	} else {
+		payload.OutName = []byte{0}
+	}
+
+	if avcMsg != nil && msgSize > 0 {
+		payload.Msg = (*[1 << 24]byte)(unsafe.Pointer(avcMsg))[:msgSize:msgSize]
+	} else {
+		payload.Msg = []byte{0}
+	}
 
 	// Reset file transfer fields to avoid sending unnecessary data
 	payload.FileContent = nil
