@@ -3,11 +3,8 @@ package main
 import "C"
 
 import (
-	"crypto/sha256"
 	dw "discon-wrapper"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"log"
 	"net/url"
 	"os"
@@ -15,6 +12,9 @@ import (
 	"strconv"
 	"strings"
 	"unsafe"
+
+	// GH-Cp gen: Import shared utilities
+	"discon-wrapper/shared/utils"
 
 	"github.com/gorilla/websocket"
 )
@@ -44,55 +44,20 @@ var fileContentReplacements = make(map[string][]struct {
 // Track if additional files have been processed
 var additionalFilesProcessed bool = false
 
-// GH-Cp gen: Function to check if a file exists
-func fileExists(filename string) bool {
-	// GH-Cp gen: Added nil/empty check to prevent segmentation fault
-	if filename == "" {
-		return false
-	}
-
-	info, err := os.Stat(filename)
-	if os.IsNotExist(err) {
-		return false
-	}
-	return !info.IsDir()
-}
-
-// GH-Cp gen: Function to read file contents
-func readFileContents(filePath string) ([]byte, error) {
-	if !fileExists(filePath) {
-		return nil, fmt.Errorf("file does not exist: %s", filePath)
-	}
-
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("error opening file: %w", err)
-	}
-	defer file.Close()
-
-	content, err := io.ReadAll(file)
-	if err != nil {
-		return nil, fmt.Errorf("error reading file: %w", err)
-	}
-
-	return content, nil
-}
+// GH-Cp gen: Logger for client operations
+var logger *utils.DebugLogger
 
 // Process the DISCON_ADDITIONAL_FILES environment variable
 func processAdditionalFiles() error {
 	additionalFilesStr, found := os.LookupEnv("DISCON_ADDITIONAL_FILES")
 	if (!found || additionalFilesStr == "") {
-		if debugLevel >= 1 {
-			log.Println("discon-client: No DISCON_ADDITIONAL_FILES specified")
-		}
+		logger.Debug("No DISCON_ADDITIONAL_FILES specified")
 		return nil
 	}
 
 	// Split the semicolon-separated list
 	additionalFiles := strings.Split(additionalFilesStr, ";")
-	if debugLevel >= 1 {
-		log.Printf("discon-client: Processing %d additional files", len(additionalFiles))
-	}
+	logger.Debug("Processing %d additional files", len(additionalFiles))
 
 	// Process all additional files
 	for _, filePath := range additionalFiles {
@@ -101,7 +66,7 @@ func processAdditionalFiles() error {
 			continue
 		}
 
-		if !fileExists(filePath) {
+		if !utils.FileExists(filePath) {
 			return fmt.Errorf("additional file does not exist: %s", filePath)
 		}
 
@@ -111,9 +76,7 @@ func processAdditionalFiles() error {
 			return fmt.Errorf("failed to send additional file %s: %w", filePath, err)
 		}
 
-		if debugLevel >= 1 {
-			log.Printf("discon-client: Additional file %s transferred to server at %s", filePath, serverPath)
-		}
+		logger.Debug("Additional file %s transferred to server at %s", filePath, serverPath)
 	}
 
 	return nil
@@ -141,15 +104,13 @@ func updateFileReferences(content []byte) []byte {
 			contentStr = strings.ReplaceAll(contentStr, localFilename, serverFilename)
 		}
 
-		if debugLevel >= 2 {
-			log.Printf("discon-client: Replaced references from %s to %s in input file", localFilename, serverFilename)
-		}
+		logger.Verbose("Replaced references from %s to %s in input file", localFilename, serverFilename)
 	}
 	
 	return []byte(contentStr)
 }
 
-// GH-Cp gen: Function to send file to server and get server path
+// GH-Cp gen: Function to send file to server and get server path - refactored to use shared utilities
 func sendFileToServer(filePath string) (string, error) {
 	// Check if we've already sent this file
 	if serverPath, exists := serverFilePaths[filePath]; exists {
@@ -157,7 +118,7 @@ func sendFileToServer(filePath string) (string, error) {
 	}
 
 	// Read the file contents
-	content, err := readFileContents(filePath)
+	content, err := utils.ReadFileContents(filePath)
 	if err != nil {
 		return "", err
 	}
@@ -165,86 +126,58 @@ func sendFileToServer(filePath string) (string, error) {
 	// If this is the primary input file and we have additional files transferred,
 	// update references to those files in the content
 	if isPrimaryInputFile[filePath] && len(serverFilePaths) > 0 {
-
-		if debugLevel >= 1 {
-			log.Printf("discon-client: Updating file references in content for %s", filePath)
-		}
-
+		logger.Debug("Updating file references in content for %s", filePath)
 		content = updateFileReferences(content)
 	}
 
-	// Create a unique filename using SHA-256 hash of content and original filename
-	hash := sha256.New()
-	hash.Write(content)
-	hash.Write([]byte(filepath.Base(filePath)))
-	hashString := hex.EncodeToString(hash.Sum(nil))
+	// Generate a server path using shared utility
+	serverPath := utils.GenerateServerFilePath(content, filePath)
 
-	// Generate a server path - use just the filename with a unique prefix
-	serverPath := fmt.Sprintf("input_%s_%s", hashString[:8], filepath.Base(filePath))
+	// Create a file transfer payload using shared utility
+	fileTransferPayload := utils.CreateFileTransferPayload(content, serverPath)
 
-	// Create a file transfer payload
-	fileTransferPayload := dw.Payload{
-		// Initialize required fields with empty values
-		Swap:           make([]float32, 1),
-		Fail:           0,
-		InFile:         []byte{0},
-		OutName:        []byte{0},
-		Msg:            []byte{0},
-		FileContent:    content,
-		ServerFilePath: []byte(serverPath + "\x00"),
-	}
-
-	if debugLevel >= 1 {
-		log.Printf("discon-client: Sending file %s to server (size: %d bytes)", filePath, len(content))
-	}
+	logger.Debug("Sending file %s to server (size: %d bytes)", filePath, len(content))
 
 	// Send the file transfer payload to the server
 	b, err := fileTransferPayload.MarshalBinary()
 	if err != nil {
-		return "", fmt.Errorf("error marshaling file transfer payload: %w", err)
+		return "", utils.FormatError("marshaling file transfer payload", err)
 	}
 
 	err = ws.WriteMessage(websocket.BinaryMessage, b)
 	if err != nil {
-		return "", fmt.Errorf("error sending file to server: %w", err)
+		return "", utils.FormatError("sending file to server", err)
 	}
 
 	// Wait for server response
 	_, resp, err := ws.ReadMessage()
 	if err != nil {
-		return "", fmt.Errorf("error receiving server response: %w", err)
+		return "", utils.FormatError("receiving server response", err)
 	}
 
 	// Unmarshal the response
 	var responsePayload dw.Payload
 	err = responsePayload.UnmarshalBinary(resp)
 	if err != nil {
-		return "", fmt.Errorf("error unmarshaling server response: %w", err)
+		return "", utils.FormatError("unmarshaling server response", err)
 	}
 
 	// Check if the file transfer succeeded
 	if responsePayload.Fail != 0 {
-		// Get the error message from the Msg field
-		errMsg := string(responsePayload.Msg)
-		i0 := strings.IndexByte(errMsg, 0)
-		if i0 >= 0 {
-			errMsg = errMsg[:i0]
-		}
+		// Get the error message from the Msg field using shared utility
+		errMsg := utils.GetErrorMessageFromPayload(&responsePayload)
 		return "", fmt.Errorf("file transfer failed: %s", errMsg)
 	}
 
 	// Store the server path for future use
 	serverFilePaths[filePath] = serverPath
 
-	if debugLevel >= 1 {
-		log.Printf("discon-client: File %s transferred successfully to server at %s", filePath, serverPath)
-	}
+	logger.Debug("File %s transferred successfully to server at %s", filePath, serverPath)
 
 	return serverPath, nil
 }
 
 func init() {
-
 	// Print info
 	fmt.Println("Loaded", program, version)
 
@@ -273,6 +206,9 @@ func init() {
 		}
 	}
 
+	// GH-Cp gen: Initialize the logger
+	logger = utils.NewDebugLogger(debugLevel, "discon-client")
+
 	// Get discon-server address from environment variable
 	serverAddr, found := os.LookupEnv("DISCON_SERVER_ADDR")
 	if !found {
@@ -291,13 +227,11 @@ func init() {
 		log.Fatal("discon-client: environment variable DISCON_LIB_PROC not set (e.g. 'discon')")
 	}
 
-	if debugLevel >= 1 {
-		log.Println("discon-client: DISCON_SERVER_ADDR=", serverAddr)
-		log.Println("discon-client: DISCON_LIB_PATH=", disconPath)
-		log.Println("discon-client: DISCON_LIB_PROC=", disconFunc)
-		log.Println("discon-client: DISCON_CLIENT_DEBUG=", debugLevel)
-		log.Println("discon-client: DISCON_ADDITIONAL_FILES=", os.Getenv("DISCON_ADDITIONAL_FILES"))
-	}
+	logger.Debug("DISCON_SERVER_ADDR= %s", serverAddr)
+	logger.Debug("DISCON_LIB_PATH= %s", disconPath)
+	logger.Debug("DISCON_LIB_PROC= %s", disconFunc)
+	logger.Debug("DISCON_CLIENT_DEBUG= %d", debugLevel)
+	logger.Debug("DISCON_ADDITIONAL_FILES= %s", os.Getenv("DISCON_ADDITIONAL_FILES"))
 
 	// Create a URL object
 	u, err := url.Parse(fmt.Sprintf("ws://%s/ws", serverAddr))
@@ -308,9 +242,7 @@ func init() {
 	// Add query parameters for shared library path and proc
 	u.RawQuery = url.Values{"path": {disconPath}, "proc": {disconFunc}}.Encode()
 
-	if debugLevel >= 1 {
-		log.Printf("discon-client: connecting to discon-server at '%s'\n", u.String())
-	}
+	logger.Debug("connecting to discon-server at '%s'", u.String())
 
 	// Connect to websocket server
 	ws, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
@@ -318,9 +250,7 @@ func init() {
 		log.Fatalf("discon-client: error connecting to discon-server at %s: %s", serverAddr, err)
 	}
 
-	if debugLevel >= 1 {
-		log.Printf("discon-client: Connected to discon-server at '%s'\n", u.String())
-	}
+	logger.Debug("Connected to discon-server at '%s'", u.String())
 }
 
 //export DISCON
@@ -339,12 +269,10 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 		payload.Swap = make([]float32, swapSize)
 	}
 
-	if debugLevel >= 2 {
-		log.Printf("discon-client: size of avrSWAP:    % 5d\n", swapSize)
-		log.Printf("discon-client: size of accINFILE:  % 5d\n", inFileSize)
-		log.Printf("discon-client: size of avcOUTNAME: % 5d\n", outNameSize)
-		log.Printf("discon-client: size of avcMSG:     % 5d\n", msgSize)
-	}
+	logger.Verbose("size of avrSWAP:    % 5d", swapSize)
+	logger.Verbose("size of accINFILE:  % 5d", inFileSize)
+	logger.Verbose("size of avcOUTNAME: % 5d", outNameSize)
+	logger.Verbose("size of avcMSG:     % 5d", msgSize)
 
 	// GH-Cp gen: Get the input file path from accInFile with safer handling
 	var inFilePath string
@@ -356,14 +284,14 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 		}
 		inFilePath = string((*[1 << 24]byte)(unsafe.Pointer(accInFile))[:safeSize])
 		// Remove any null terminators from the end of the string
-		inFilePath = strings.TrimRight(inFilePath, "\x00")
+		inFilePath = utils.SafeTrimString(inFilePath) 
 	}
 	
 	// Process additional files before handling the main input file (but only once)
 	if !additionalFilesProcessed {
 		// Process any additional files specified via environment variable
 		if err := processAdditionalFiles(); err != nil {
-			log.Printf("discon-client: Error processing additional files: %v", err)
+			logger.Error("Error processing additional files: %v", err)
 			// Set failure flag
 			*aviFail = C.int(1)
 			// Set error message
@@ -375,10 +303,8 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 	}
 
 	// GH-Cp gen: Check if the input file exists locally and transfer it to server if needed
-	if inFilePath != "" && fileExists(inFilePath) {
-		if debugLevel >= 2 {
-			log.Printf("discon-client: Input file found locally: %s", inFilePath)
-		}
+	if inFilePath != "" && utils.FileExists(inFilePath) {
+		logger.Verbose("Input file found locally: %s", inFilePath)
 		
 		// Mark this as the primary input file
 		isPrimaryInputFile[inFilePath] = true
@@ -386,7 +312,7 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 		// Transfer file to server and get the server-side path
 		serverPath, err := sendFileToServer(inFilePath)
 		if err != nil {
-			log.Printf("discon-client: Error transferring file %s: %v", inFilePath, err)
+			logger.Error("Error transferring file %s: %v", inFilePath, err)
 			// Set failure flag
 			*aviFail = C.int(1)
 			// Set error message
@@ -405,14 +331,12 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 		// Update the inFileSize in the swap array
 		swap[49] = float32(len(serverPathBytes))
 
-		if debugLevel >= 2 {
-			log.Printf("discon-client: Using server path for input file: %s", serverPath)
-		}
+		logger.Verbose("Using server path for input file: %s", serverPath)
 	} else {
 		// Handle original path - with safety checks
 		if accInFile != nil && inFileSize > 0 {
-			if debugLevel >= 1 && inFilePath != "" {
-				log.Printf("discon-client: Input file not found locally: %s, continuing with original path", inFilePath)
+			if inFilePath != "" {
+				logger.Debug("Input file not found locally: %s, continuing with original path", inFilePath)
 			}
 			payload.InFile = (*[1 << 24]byte)(unsafe.Pointer(accInFile))[:inFileSize:inFileSize]
 		} else {
@@ -442,6 +366,9 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 	payload.FileContent = nil
 	payload.ServerFilePath = nil
 
+	// GH-Cp gen: Ensure payload is properly formatted
+	utils.PreparePayloadForTransmission(&payload)
+
 	// Convert payload to binary and send over websocket
 	b, err := payload.MarshalBinary()
 	if err != nil {
@@ -449,9 +376,7 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 	}
 	ws.WriteMessage(websocket.BinaryMessage, b)
 
-	if debugLevel >= 2 {
-		log.Println("discon-client: sent payload:\n", payload)
-	}
+	logger.Verbose("sent payload: %v", payload)
 
 	if debugLevel >= 1 && sentSwapFile != nil {
 		outSwapSize := min(swapSize, 163)
@@ -473,9 +398,7 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 		log.Fatalf("discon-client: %s", err)
 	}
 
-	if debugLevel >= 2 {
-		log.Println("discon-client: received payload:\n", payload)
-	}
+	logger.Verbose("received payload: %v", payload)
 
 	if debugLevel >= 1 && recvSwapFile != nil {
 		outSwapSize := min(swapSize, 163)
