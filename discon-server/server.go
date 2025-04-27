@@ -8,7 +8,7 @@ import (
 )
 
 const program = "discon-server"
-const version = "v0.1.0"
+const version = "v0.2.0"
 
 // GH-Cp gen: Using an int for debug levels instead of boolean
 var debugLevel int = 0

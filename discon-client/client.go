@@ -20,7 +20,7 @@ import (
 )
 
 const program = "discon-client"
-const version = "v0.1.0"
+const version = "v0.2.0"
 
 var debugLevel int = 0
 
@@ -31,6 +31,18 @@ var recvSwapFile *os.File
 
 // GH-Cp gen: Map to store server-side file paths for transferred files
 var serverFilePaths = make(map[string]string)
+
+// Added map to track if a file is the primary input file
+var isPrimaryInputFile = make(map[string]bool)
+
+// Added map for storing file content replacements
+var fileContentReplacements = make(map[string][]struct {
+	Original string
+	Replaced string
+})
+
+// Track if additional files have been processed
+var additionalFilesProcessed bool = false
 
 // GH-Cp gen: Function to check if a file exists
 func fileExists(filename string) bool {
@@ -66,13 +78,81 @@ func readFileContents(filePath string) ([]byte, error) {
 	return content, nil
 }
 
+// Process the DISCON_ADDITIONAL_FILES environment variable
+func processAdditionalFiles() error {
+	additionalFilesStr, found := os.LookupEnv("DISCON_ADDITIONAL_FILES")
+	if (!found || additionalFilesStr == "") {
+		if debugLevel >= 1 {
+			log.Println("discon-client: No DISCON_ADDITIONAL_FILES specified")
+		}
+		return nil
+	}
+
+	// Split the semicolon-separated list
+	additionalFiles := strings.Split(additionalFilesStr, ";")
+	if debugLevel >= 1 {
+		log.Printf("discon-client: Processing %d additional files", len(additionalFiles))
+	}
+
+	// Process all additional files
+	for _, filePath := range additionalFiles {
+		filePath = strings.TrimSpace(filePath)
+		if filePath == "" {
+			continue
+		}
+
+		if !fileExists(filePath) {
+			return fmt.Errorf("additional file does not exist: %s", filePath)
+		}
+
+		// Send the file but don't track errors - we'll collect and report them later
+		serverPath, err := sendFileToServer(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to send additional file %s: %w", filePath, err)
+		}
+
+		if debugLevel >= 1 {
+			log.Printf("discon-client: Additional file %s transferred to server at %s", filePath, serverPath)
+		}
+	}
+
+	return nil
+}
+
+// Function to update file references in a content buffer
+func updateFileReferences(content []byte) []byte {
+	contentStr := string(content)
+	
+	// Go through each file that might need replacement
+	for localPath, serverPath := range serverFilePaths {
+		// Skip the primary input file itself
+		if isPrimaryInputFile[localPath] {
+			continue
+		}
+		
+		// Also try to replace just the filename (in case only the filename is referenced)
+		// but only if it's not already a server path (doesn't start with "input_")
+		localFilename := filepath.Base(localPath)
+		serverFilename := filepath.Base(serverPath)
+		
+		// Only replace the filename if it's not already a server path (doesn't start with "input_")
+		if !strings.HasPrefix(localFilename, "input_") {
+			// Replace only whole words to avoid partial replacements within other words
+			contentStr = strings.ReplaceAll(contentStr, localFilename, serverFilename)
+		}
+
+		if debugLevel >= 2 {
+			log.Printf("discon-client: Replaced references from %s to %s in input file", localFilename, serverFilename)
+		}
+	}
+	
+	return []byte(contentStr)
+}
+
 // GH-Cp gen: Function to send file to server and get server path
 func sendFileToServer(filePath string) (string, error) {
 	// Check if we've already sent this file
 	if serverPath, exists := serverFilePaths[filePath]; exists {
-		// if debugLevel >= 1 {
-		// 	log.Printf("discon-client: Using cached server path for %s: %s", filePath, serverPath)
-		// }
 		return serverPath, nil
 	}
 
@@ -80,6 +160,17 @@ func sendFileToServer(filePath string) (string, error) {
 	content, err := readFileContents(filePath)
 	if err != nil {
 		return "", err
+	}
+	
+	// If this is the primary input file and we have additional files transferred,
+	// update references to those files in the content
+	if isPrimaryInputFile[filePath] && len(serverFilePaths) > 0 {
+
+		if debugLevel >= 1 {
+			log.Printf("discon-client: Updating file references in content for %s", filePath)
+		}
+
+		content = updateFileReferences(content)
 	}
 
 	// Create a unique filename using SHA-256 hash of content and original filename
@@ -205,6 +296,7 @@ func init() {
 		log.Println("discon-client: DISCON_LIB_PATH=", disconPath)
 		log.Println("discon-client: DISCON_LIB_PROC=", disconFunc)
 		log.Println("discon-client: DISCON_CLIENT_DEBUG=", debugLevel)
+		log.Println("discon-client: DISCON_ADDITIONAL_FILES=", os.Getenv("DISCON_ADDITIONAL_FILES"))
 	}
 
 	// Create a URL object
@@ -266,12 +358,30 @@ func DISCON(avrSwap *C.float, aviFail *C.int, accInFile, avcOutName, avcMsg *C.c
 		// Remove any null terminators from the end of the string
 		inFilePath = strings.TrimRight(inFilePath, "\x00")
 	}
+	
+	// Process additional files before handling the main input file (but only once)
+	if !additionalFilesProcessed {
+		// Process any additional files specified via environment variable
+		if err := processAdditionalFiles(); err != nil {
+			log.Printf("discon-client: Error processing additional files: %v", err)
+			// Set failure flag
+			*aviFail = C.int(1)
+			// Set error message
+			errMsg := fmt.Sprintf("Additional files transfer failed: %v", err)
+			copy((*[1 << 24]byte)(unsafe.Pointer(avcMsg))[:msgSize], []byte(errMsg))
+			return
+		}
+		additionalFilesProcessed = true
+	}
 
 	// GH-Cp gen: Check if the input file exists locally and transfer it to server if needed
 	if inFilePath != "" && fileExists(inFilePath) {
 		if debugLevel >= 2 {
 			log.Printf("discon-client: Input file found locally: %s", inFilePath)
 		}
+		
+		// Mark this as the primary input file
+		isPrimaryInputFile[inFilePath] = true
 
 		// Transfer file to server and get the server-side path
 		serverPath, err := sendFileToServer(inFilePath)
