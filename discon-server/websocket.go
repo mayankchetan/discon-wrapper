@@ -87,9 +87,6 @@ func handleFileTransfer(connID int32, payload *dw.Payload, logger *utils.DebugLo
 }
 
 func ServeWs(w http.ResponseWriter, r *http.Request, debugLevel int) {
-	// GH-Cp gen: Create a logger for this connection
-	logger := utils.NewDebugLogger(debugLevel, "discon-server")
-
 	wg.Add(1)
 	defer wg.Done()
 
@@ -101,6 +98,9 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debugLevel int) {
 		connectionID = 0
 	}
 	connectionIDMutex.Unlock()
+
+	// GH-Cp gen: Create a connection-specific logger with the connection ID
+	logger := utils.NewConnectionLogger(debugLevel, "discon-server", connID)
 
 	// Read controller path and function name from post parameters
 	params, err := url.ParseQuery(r.URL.RawQuery)
@@ -172,6 +172,9 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debugLevel int) {
 	}
 	defer ws.Close()
 
+	// Log client connection info 
+	logger.Debug("New WebSocket connection established from %s", ws.RemoteAddr().String())
+
 	// Create payload structure
 	payload := dw.Payload{}
 
@@ -187,18 +190,18 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debugLevel int) {
 		// Read message from websocket
 		messageType, b, err := ws.ReadMessage()
 		if err != nil {
-			log.Println("read:", err)
+			logger.Debug("WebSocket read error: %v", err)
 			break
 		}
 
 		if messageType != websocket.BinaryMessage {
-			log.Println("message type:", messageType)
+			logger.Debug("Received non-binary message type: %d", messageType)
 			continue
 		}
 
 		err = payload.UnmarshalBinary(b)
 		if err != nil {
-			log.Println("payload.UnmarshalBinary:", err)
+			logger.Error("Failed to unmarshal payload: %v", err)
 			break
 		}
 
@@ -213,12 +216,12 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debugLevel int) {
 			}
 			b, err = response.MarshalBinary()
 			if err != nil {
-				log.Println("response.MarshalBinary:", err)
+				logger.Error("Failed to marshal response: %v", err)
 				break
 			}
 			err = ws.WriteMessage(websocket.BinaryMessage, b)
 			if err != nil {
-				log.Println("write:", err)
+				logger.Error("Failed to write response: %v", err)
 				break
 			}
 			continue
@@ -235,12 +238,12 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debugLevel int) {
 		// Convert payload to binary and send over websocket
 		b, err = payload.MarshalBinary()
 		if err != nil {
-			log.Println("payload.MarshalBinary:", err)
+			logger.Error("Failed to marshal payload: %v", err)
 			break
 		}
 		err = ws.WriteMessage(websocket.BinaryMessage, b)
 		if err != nil {
-			log.Println("write:", err)
+			logger.Error("Failed to write message: %v", err)
 			break
 		}
 
@@ -248,6 +251,8 @@ func ServeWs(w http.ResponseWriter, r *http.Request, debugLevel int) {
 		logger.Verbose("sent payload: %v", payload)
 	}
 
+	logger.Debug("WebSocket connection closed")
+	
 	// Unload the shared library
 	C.unload_shared_library(C.int(connID))
 }

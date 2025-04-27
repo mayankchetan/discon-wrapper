@@ -61,7 +61,11 @@ set DISCON_CLIENT_DEBUG=1
 openfast.exe my_turbine.fst
 ```
 
-- `DISCON_SERVER_ADDR` describes the host and port the server is listening on. `localhost` indicates the same machine and the port, `8080`, needs to match the number that was given to the server via the `--port` argument.
+- `DISCON_SERVER_ADDR` describes the server address in one of these formats:
+  - `hostname:port` (e.g. `localhost:8080`) - Standard WebSocket connection
+  - `domain.name` (e.g. `controller.company.com`) - For use with reverse proxies that handle the port internally
+  - `http://domain.name` - Explicit HTTP protocol, uses WebSocket (ws://)
+  - `https://domain.name` - Secure HTTPS protocol, uses secure WebSocket (wss://)
 - `DISCON_LIB_PATH` is the path from `discon-server_386.exe` to the controller shared library.
 - `DISCON_LIB_PROC` is the procedure which will be called in the controller shared library.
 - `DISCON_CLIENT_DEBUG` is used to enable debugging output on the client side, messages will be printed to the terminal.

@@ -3,6 +3,7 @@ package main
 import "C"
 
 import (
+	"crypto/tls"
 	dw "discon-wrapper"
 	"fmt"
 	"log"
@@ -212,7 +213,7 @@ func init() {
 	// Get discon-server address from environment variable
 	serverAddr, found := os.LookupEnv("DISCON_SERVER_ADDR")
 	if !found {
-		log.Fatal("discon-client: environment variable DISCON_SERVER_ADDR not set (e.g. 'localhost:8080')")
+		log.Fatal("discon-client: environment variable DISCON_SERVER_ADDR not set (e.g. 'localhost:8080' or 'https://controller.domain.com')")
 	}
 
 	// Get shared library path from environment variable
@@ -233,8 +234,23 @@ func init() {
 	logger.Debug("DISCON_CLIENT_DEBUG= %d", debugLevel)
 	logger.Debug("DISCON_ADDITIONAL_FILES= %s", os.Getenv("DISCON_ADDITIONAL_FILES"))
 
+	// Determine if we're using HTTPS/WSS based on the provided server address
+	var wsURL string
+	if strings.HasPrefix(strings.ToLower(serverAddr), "http://") {
+		// HTTP URL provided - use ws://
+		serverAddr = strings.TrimPrefix(serverAddr, "http://")
+		wsURL = fmt.Sprintf("ws://%s/ws", serverAddr)
+	} else if strings.HasPrefix(strings.ToLower(serverAddr), "https://") {
+		// HTTPS URL provided - use wss://
+		serverAddr = strings.TrimPrefix(serverAddr, "https://")
+		wsURL = fmt.Sprintf("wss://%s/ws", serverAddr)
+	} else {
+		// No protocol provided, assume ws:// (non-secure)
+		wsURL = fmt.Sprintf("ws://%s/ws", serverAddr)
+	}
+
 	// Create a URL object
-	u, err := url.Parse(fmt.Sprintf("ws://%s/ws", serverAddr))
+	u, err := url.Parse(wsURL)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -245,7 +261,16 @@ func init() {
 	logger.Debug("connecting to discon-server at '%s'", u.String())
 
 	// Connect to websocket server
-	ws, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
+	dialer := websocket.DefaultDialer
+	// If using wss (secure WebSocket), we might need to skip certificate verification in some cases
+	if strings.HasPrefix(u.String(), "wss://") {
+		dialer.TLSClientConfig = &tls.Config{
+			// For production, you should properly handle certificates
+			// InsecureSkipVerify: true, // Uncomment this line to skip certificate verification (not recommended for production)
+		}
+	}
+
+	ws, _, err = dialer.Dial(u.String(), nil)
 	if err != nil {
 		log.Fatalf("discon-client: error connecting to discon-server at %s: %s", serverAddr, err)
 	}
