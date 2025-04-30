@@ -1,0 +1,46 @@
+# Dockerfile for ROSCO controller image to be used with discon-manager
+
+# Stage 1: Build the ROSCO controller library
+FROM ubuntu:22.04 as rosco-builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    cmake \
+    make \
+    gcc \
+    gfortran \
+    liblapack-dev \
+    libblas-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone ROSCO repository
+WORKDIR /build
+RUN git clone --depth=1 https://github.com/NREL/ROSCO.git rosco
+
+# Build ROSCO library
+WORKDIR /build/rosco/rosco/controller
+RUN mkdir build && cd build && \
+    cmake .. -DBUILD_SHARED_LIBS=ON && \
+    make
+
+# Stage 2: Use the discon-server image as base
+# Build using separate build command: 
+# docker build -f docker/Dockerfile.server -t discon-server:latest .
+FROM discon-server:latest
+
+# Copy ROSCO library from builder stage
+COPY --from=rosco-builder /build/rosco/rosco/controller/build/libdiscon.so /app/build/libdiscon.so
+
+# Set environment variables for the ROSCO controller
+ENV CONTROLLER_PATH="/controller/libdiscon.so"
+ENV CONTROLLER_PROC="DISCON"
+ENV DEBUG_LEVEL=1
+
+# Update labels for this specific controller
+LABEL maintainer="DisconManager Team"
+LABEL description="ROSCO wind turbine controller for discon-manager"
+LABEL controller.name="ROSCO"
+LABEL controller.version="2.6.0"
+
+# Note: ENTRYPOINT, CMD, WORKDIR, EXPOSE inherited from the discon-server base image

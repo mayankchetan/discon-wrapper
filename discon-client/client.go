@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time" // Added time package
 	"unsafe"
 
 	// GH-Cp gen: Import shared utilities
@@ -111,7 +112,7 @@ func updateFileReferences(content []byte) []byte {
 	return []byte(contentStr)
 }
 
-// GH-Cp gen: Function to send file to server and get server path - refactored to use shared utilities
+// GH-Cp gen: Function to send file to server with retry mechanism
 func sendFileToServer(filePath string) (string, error) {
 	// Check if we've already sent this file
 	if serverPath, exists := serverFilePaths[filePath]; exists {
@@ -139,43 +140,63 @@ func sendFileToServer(filePath string) (string, error) {
 
 	logger.Debug("Sending file %s to server (size: %d bytes)", filePath, len(content))
 
-	// Send the file transfer payload to the server
-	b, err := fileTransferPayload.MarshalBinary()
-	if err != nil {
-		return "", utils.FormatError("marshaling file transfer payload", err)
+	// Add retry logic for file transfers
+	maxRetries := 3
+	var transferErr error
+	
+	for retry := 0; retry < maxRetries; retry++ {
+		if retry > 0 {
+			logger.Debug("Retrying file transfer for %s (attempt %d/%d)...", filePath, retry+1, maxRetries)
+			// Wait a bit before retrying with exponential backoff
+			utils.SleepWithBackoff(retry, 200)
+		}
+		
+		// Send the file transfer payload to the server
+		b, err := fileTransferPayload.MarshalBinary()
+		if err != nil {
+			transferErr = utils.FormatError("marshaling file transfer payload", err)
+			continue
+		}
+
+		err = ws.WriteMessage(websocket.BinaryMessage, b)
+		if err != nil {
+			transferErr = utils.FormatError("sending file to server", err)
+			continue
+		}
+
+		// Wait for server response with a timeout
+		ws.SetReadDeadline(time.Now().Add(5 * time.Second))
+		_, resp, err := ws.ReadMessage()
+		ws.SetReadDeadline(time.Time{}) // Clear the deadline after read
+		
+		if err != nil {
+			transferErr = utils.FormatError("receiving server response", err)
+			continue
+		}
+
+		// Unmarshal the response
+		var responsePayload dw.Payload
+		err = responsePayload.UnmarshalBinary(resp)
+		if err != nil {
+			transferErr = utils.FormatError("unmarshaling server response", err)
+			continue
+		}
+
+		// Check if the file transfer succeeded
+		if responsePayload.Fail != 0 {
+			// Get the error message from the Msg field using shared utility
+			errMsg := utils.GetErrorMessageFromPayload(&responsePayload)
+			transferErr = fmt.Errorf("file transfer failed: %s", errMsg)
+			continue
+		}
+
+		// Store the server path for future use
+		serverFilePaths[filePath] = serverPath
+		logger.Debug("File %s transferred successfully to server at %s", filePath, serverPath)
+		return serverPath, nil
 	}
-
-	err = ws.WriteMessage(websocket.BinaryMessage, b)
-	if err != nil {
-		return "", utils.FormatError("sending file to server", err)
-	}
-
-	// Wait for server response
-	_, resp, err := ws.ReadMessage()
-	if err != nil {
-		return "", utils.FormatError("receiving server response", err)
-	}
-
-	// Unmarshal the response
-	var responsePayload dw.Payload
-	err = responsePayload.UnmarshalBinary(resp)
-	if err != nil {
-		return "", utils.FormatError("unmarshaling server response", err)
-	}
-
-	// Check if the file transfer succeeded
-	if responsePayload.Fail != 0 {
-		// Get the error message from the Msg field using shared utility
-		errMsg := utils.GetErrorMessageFromPayload(&responsePayload)
-		return "", fmt.Errorf("file transfer failed: %s", errMsg)
-	}
-
-	// Store the server path for future use
-	serverFilePaths[filePath] = serverPath
-
-	logger.Debug("File %s transferred successfully to server at %s", filePath, serverPath)
-
-	return serverPath, nil
+	
+	return "", fmt.Errorf("failed to transfer file after %d attempts: %v", maxRetries, transferErr)
 }
 
 func init() {
@@ -260,7 +281,7 @@ func init() {
 
 	logger.Debug("connecting to discon-server at '%s'", u.String())
 
-	// Connect to websocket server
+	// Connect to websocket server with retry logic
 	dialer := websocket.DefaultDialer
 	// If using wss (secure WebSocket), we might need to skip certificate verification in some cases
 	if strings.HasPrefix(u.String(), "wss://") {
@@ -270,9 +291,28 @@ func init() {
 		}
 	}
 
-	ws, _, err = dialer.Dial(u.String(), nil)
-	if err != nil {
-		log.Fatalf("discon-client: error connecting to discon-server at %s: %s", serverAddr, err)
+	// Add retry logic for initial connection
+	maxRetries := 5
+	var connectionErr error
+	
+	for retry := 0; retry < maxRetries; retry++ {
+		if retry > 0 {
+			logger.Debug("Retrying connection to server (attempt %d/%d)...", retry+1, maxRetries)
+			// Wait a bit before retrying
+			utils.SleepWithBackoff(retry, 500) // Exponential backoff starting at 500ms
+		}
+		
+		ws, _, connectionErr = dialer.Dial(u.String(), nil)
+		if connectionErr == nil {
+			break // Connection successful
+		}
+		
+		logger.Debug("Connection attempt %d failed: %v", retry+1, connectionErr)
+	}
+	
+	if connectionErr != nil {
+		log.Fatalf("discon-client: failed to connect to discon-server at %s after %d attempts: %s", 
+			serverAddr, maxRetries, connectionErr)
 	}
 
 	logger.Debug("Connected to discon-server at '%s'", u.String())

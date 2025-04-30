@@ -4,6 +4,7 @@ package utils
 import (
 	"fmt"
 	"log"
+	"time"
 )
 
 // GH-Cp gen: DebugLogger provides a standardized logging interface
@@ -74,4 +75,14 @@ func (dl *DebugLogger) Error(format string, v ...interface{}) {
 		format = "ERROR: " + format
 	}
 	log.Printf(format, v...)
+}
+
+// SleepWithBackoff implements an exponential backoff sleep
+func SleepWithBackoff(retryCount int, baseMs int) {
+	sleepTime := time.Duration(baseMs*(1<<uint(retryCount))) * time.Millisecond
+	// Cap at 10 seconds
+	if sleepTime > 10*time.Second {
+		sleepTime = 10 * time.Second
+	}
+	time.Sleep(sleepTime)
 }

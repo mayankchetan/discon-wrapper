@@ -1,0 +1,46 @@
+# Dockerfile for ROSCO controller using discon-wrapper as base
+# This approach reduces redundancy by building on the main discon-wrapper image
+
+# Stage 1: Build the ROSCO controller library
+FROM ubuntu:22.04 as rosco-builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    cmake \
+    make \
+    gcc \
+    gfortran \
+    liblapack-dev \
+    libblas-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone ROSCO repository
+WORKDIR /build
+RUN git clone --depth=1 https://github.com/NREL/ROSCO.git rosco
+
+# Build ROSCO library
+WORKDIR /build/rosco/rosco/controller
+RUN mkdir build && cd build && \
+    cmake .. -DBUILD_SHARED_LIBS=ON && \
+    make
+
+# Stage 2: Use the existing discon-wrapper image as base
+# First build the base image if it doesn't exist: docker build -t discon-wrapper .
+FROM discon-wrapper:latest
+
+# Copy ROSCO library from builder stage
+COPY --from=rosco-builder /build/rosco/rosco/controller/build/libdiscon.so /controller/libdiscon.so
+
+# Set environment variables for the ROSCO controller
+ENV CONTROLLER_PATH="/controller/libdiscon.so"
+ENV CONTROLLER_PROC="DISCON"
+
+# Update labels for this specific controller
+LABEL maintainer="disconServer"
+LABEL description="ROSCO wind turbine controller for disconServer"
+LABEL controller.name="ROSCO"
+LABEL controller.version="1.0.0"
+
+# Note: We don't need to specify ENTRYPOINT, CMD, WORKDIR, EXPOSE, etc.
+# because they're inherited from the base discon-wrapper image

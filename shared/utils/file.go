@@ -78,9 +78,12 @@ func GenerateServerFilePath(content []byte, originalFilename string) string {
 	return fmt.Sprintf("input_%s_%s", hashString[:8], filepath.Base(originalFilename))
 }
 
-// GH-Cp gen: SafeTrimString removes null terminators from the end of a string
+// GH-Cp gen: SafeTrimString removes null terminators and trailing whitespace from a string
 func SafeTrimString(s string) string {
-	return strings.TrimRight(s, "\x00")
+	// Remove any null terminators that might be present
+	s = strings.TrimRight(s, "\x00")
+	// Also trim any whitespace
+	return strings.TrimSpace(s)
 }
 
 // GH-Cp gen: CreateTempFile creates a temp file with a unique name based on original path and connID

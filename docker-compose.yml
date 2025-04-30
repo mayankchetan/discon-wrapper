@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  discon-manager:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.manager
+    image: discon-manager:latest
+    container_name: discon-manager
+    restart: unless-stopped
+    network_mode: "host"  # Use host networking instead of bridge
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./discon-manager/config:/app/config
+      - ./discon-manager/db:/app/db
+      - ./metrics:/app/metrics
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+
+# Still define the network for the containers that will be spawned by the manager
+networks:
+  discon-network:
+    name: discon-network
+    driver: bridge
+    # Add custom bridge configuration to avoid conflicts
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.33.0.0/16  # Use a subnet less likely to conflict

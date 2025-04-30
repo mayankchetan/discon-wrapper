@@ -1,0 +1,30 @@
+# DisconManager Configuration
+
+# Server configuration
+server:
+  port: 8080
+  host: "0.0.0.0"
+  debug_level: 1  # 0=disabled, 1=basic info, 2=verbose with payloads
+
+# Docker configuration
+docker:
+  network_name: "discon-network"
+  container_prefix: "discon-controller-"
+  memory_limit: "512m"  # 512MB memory limit per container
+  cpu_limit: 1.0  # 1 CPU core limit per container
+  cleanup_timeout: 30  # Seconds to wait after connection closes before removing container
+
+# Database configuration
+database:
+  path: "/app/db/controllers.json"  # Will be mounted from host
+
+# Metrics configuration
+metrics:
+  enabled: true
+  path: "/app/metrics"  # Directory where metrics are stored
+  collection_interval: 60  # Seconds between metrics collection
+
+# Health check configuration
+health:
+  interval: 30  # Seconds between health checks
+  timeout: 5    # Seconds before health check times out
