@@ -28,3 +28,9 @@ metrics:
 health:
   interval: 30  # Seconds between health checks
   timeout: 5    # Seconds before health check times out
+
+# Authentication configuration
+auth:
+  enabled: true                            # Enable authentication for admin interface
+  username: "admin"                        # Admin username
+  password: "discon2025"                   # Admin password (change this!)

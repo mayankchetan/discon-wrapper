@@ -7,6 +7,7 @@ type Config struct {
 	Database DatabaseConfig `mapstructure:"database"`
 	Metrics  MetricsConfig  `mapstructure:"metrics"`
 	Health   HealthConfig   `mapstructure:"health"`
+	Auth     AuthConfig     `mapstructure:"auth"`
 }
 
 // ServerConfig represents the server configuration
@@ -32,8 +33,8 @@ type DatabaseConfig struct {
 
 // MetricsConfig represents the metrics configuration
 type MetricsConfig struct {
-	Enabled           bool   `mapstructure:"enabled"`
-	Path              string `mapstructure:"path"`
+	Enabled            bool   `mapstructure:"enabled"`
+	Path               string `mapstructure:"path"`
 	CollectionInterval int    `mapstructure:"collection_interval"`
 }
 
@@ -41,4 +42,11 @@ type MetricsConfig struct {
 type HealthConfig struct {
 	Interval int `mapstructure:"interval"`
 	Timeout  int `mapstructure:"timeout"`
+}
+
+// AuthConfig represents authentication configuration for admin access
+type AuthConfig struct {
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+	Enabled  bool   `mapstructure:"enabled"`
 }

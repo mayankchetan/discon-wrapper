@@ -292,14 +292,14 @@ func (dc *DockerController) GetContainerByClientID(clientID string) (*ContainerI
 	return nil, false
 }
 
-// ListContainers returns a list of all containers
+// ListContainers returns a list of all active containers managed by this controller
 func (dc *DockerController) ListContainers() []*ContainerInfo {
 	dc.mutex.RLock()
 	defer dc.mutex.RUnlock()
 
 	containers := make([]*ContainerInfo, 0, len(dc.containers))
-	for _, info := range dc.containers {
-		containers = append(containers, info)
+	for _, container := range dc.containers {
+		containers = append(containers, container)
 	}
 
 	return containers

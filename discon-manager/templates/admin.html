@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DisconManager - Controller Administration</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            line-height: 1.6;
+            padding: 0;
+            margin: 0;
+            color: #333;
+            background-color: #f4f7fa;
+        }
+        header {
+            background-color: #1a73e8;
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        h1, h2, h3 {
+            margin-top: 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 2rem;
+            background-color: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        th, td {
+            text-align: left;
+            padding: 0.8rem;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        th {
+            background-color: #f5f5f5;
+        }
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+        button, .button {
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin-right: 0.5rem;
+            text-decoration: none;
+            display: inline-block;
+        }
+        button.danger {
+            background-color: #ea4335;
+        }
+        button.warning {
+            background-color: #fbbc05;
+            color: #333;
+        }
+        button.success {
+            background-color: #34a853;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 100;
+            overflow: auto;
+        }
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 2rem;
+            border-radius: 8px;
+            max-width: 600px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            position: relative;
+        }
+        .close {
+            position: absolute;
+            top: 1rem;
+            right: 1.5rem;
+            font-size: 1.5rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        form {
+            margin: 1.5rem 0;
+        }
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 0.6rem;
+            font-size: 1rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .version-list {
+            margin-top: 1rem;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .version-item {
+            padding: 0.8rem;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .version-item:last-child {
+            border-bottom: none;
+        }
+        .alerts {
+            margin-bottom: 2rem;
+        }
+        .alert {
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+        }
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .alert-danger {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .alert-warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-active {
+            background-color: #34a853;
+        }
+        .status-inactive {
+            background-color: #ea4335;
+        }
+        .actions {
+            display: flex;
+            gap: 8px;
+        }
+        .tab-container {
+            margin-bottom: 2rem;
+        }
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 1.5rem;
+        }
+        .tab {
+            padding: 0.8rem 1.5rem;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-right: 1rem;
+        }
+        .tab.active {
+            border-bottom: 2px solid #1a73e8;
+            color: #1a73e8;
+            font-weight: 500;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>DisconManager Controller Administration</h1>
+    </header>
+    
+    <div class="container">
+        <div class="tab-container">
+            <div class="tabs">
+                <div class="tab active" data-tab="controllers">Controllers</div>
+                <div class="tab" data-tab="testing">Test Controllers</div>
+                <div class="tab" data-tab="containers">Active Containers</div>
+            </div>
+            
+            <div id="controllers-tab" class="tab-content active">
+                <div class="alerts">
+                    <!-- Alerts will be inserted here -->
+                </div>
+                
+                <div class="actions">
+                    <button type="button" onclick="openAddModal()">Add New Controller</button>
+                </div>
+                
+                <h2>Available Controllers</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Version</th>
+                            <th>Image</th>
+                            <th>Description</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Controllers}}
+                        <tr>
+                            <td>{{.ID}}</td>
+                            <td>{{.Name}}</td>
+                            <td>{{.Version}}</td>
+                            <td>{{.Image}}</td>
+                            <td>{{.Description}}</td>
+                            <td class="actions">
+                                <button type="button" onclick="openEditModal('{{.ID}}')">Edit</button>
+                                <button type="button" class="warning" onclick="openTestModal('{{.ID}}')">Test</button>
+                                <button type="button" class="danger" onclick="confirmDelete('{{.ID}}')">Delete</button>
+                            </td>
+                        </tr>
+                        {{else}}
+                        <tr>
+                            <td colspan="6">No controllers available</td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+            
+            <div id="testing-tab" class="tab-content">
+                <h2>Test Controllers</h2>
+                <p>Test controllers before deployment to ensure they work correctly.</p>
+                
+                <div class="form-group">
+                    <label for="test-controller">Select Controller to Test:</label>
+                    <select id="test-controller">
+                        <option value="">Select a controller</option>
+                        {{range .Controllers}}
+                        <option value="{{.ID}}">{{.Name}} ({{.ID}})</option>
+                        {{end}}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <button type="button" id="start-test-button" onclick="startControllerTest()">Start Test</button>
+                </div>
+                
+                <div class="form-group">
+                    <h3>Test Results</h3>
+                    <pre id="test-results" style="background: #f5f5f5; padding: 1rem; border-radius: 4px; max-height: 400px; overflow: auto;">Select a controller and start a test to see results...</pre>
+                </div>
+            </div>
+            
+            <div id="containers-tab" class="tab-content">
+                <h2>Active Containers</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Container ID</th>
+                            <th>Image</th>
+                            <th>Client ID</th>
+                            <th>Created At</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Containers}}
+                        <tr>
+                            <td>{{.Name}}</td>
+                            <td>{{.ID | truncateID}}</td>
+                            <td>{{.Image}}</td>
+                            <td>{{.ClientID}}</td>
+                            <td>{{.CreatedAt | formatTime}}</td>
+                            <td>
+                                <button type="button" class="danger" onclick="stopContainer('{{.ID}}')">Stop</button>
+                            </td>
+                        </tr>
+                        {{else}}
+                        <tr>
+                            <td colspan="6">No active containers</td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add Controller Modal -->
+    <div id="add-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('add-modal')">&times;</span>
+            <h2>Add New Controller</h2>
+            <form id="add-controller-form" method="POST" action="/admin/controllers">
+                <div class="form-group">
+                    <label for="id">Controller ID:</label>
+                    <input type="text" id="id" name="id" required>
+                </div>
+                <div class="form-group">
+                    <label for="name">Name:</label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="version">Version:</label>
+                    <input type="text" id="version" name="version" required>
+                </div>
+                <div class="form-group">
+                    <label for="image">Docker Image:</label>
+                    <input type="text" id="image" name="image" required>
+                </div>
+                <div class="form-group">
+                    <label for="description">Description:</label>
+                    <textarea id="description" name="description" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="library_path">Library Path:</label>
+                    <input type="text" id="library_path" name="library_path" required>
+                </div>
+                <div class="form-group">
+                    <label for="proc_name">Procedure Name:</label>
+                    <input type="text" id="proc_name" name="proc_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="internal_port">Internal Port:</label>
+                    <input type="number" id="internal_port" name="internal_port" value="8080" required>
+                </div>
+                <div class="form-group">
+                    <label for="external_port">External Port (0 for auto-assign):</label>
+                    <input type="number" id="external_port" name="external_port" value="0" required>
+                </div>
+                <button type="submit" class="success">Add Controller</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Edit Controller Modal -->
+    <div id="edit-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('edit-modal')">&times;</span>
+            <h2>Edit Controller</h2>
+            <form id="edit-controller-form" method="POST" action="/admin/controllers/update">
+                <input type="hidden" id="edit-id" name="id">
+                <div class="form-group">
+                    <label for="edit-name">Name:</label>
+                    <input type="text" id="edit-name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-version">Version:</label>
+                    <input type="text" id="edit-version" name="version" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-image">Docker Image:</label>
+                    <input type="text" id="edit-image" name="image" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-description">Description:</label>
+                    <textarea id="edit-description" name="description" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="edit-library_path">Library Path:</label>
+                    <input type="text" id="edit-library_path" name="library_path" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-proc_name">Procedure Name:</label>
+                    <input type="text" id="edit-proc_name" name="proc_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-internal_port">Internal Port:</label>
+                    <input type="number" id="edit-internal_port" name="internal_port" required>
+                </div>
+                <div class="form-group">
+                    <label for="edit-external_port">External Port (0 for auto-assign):</label>
+                    <input type="number" id="edit-external_port" name="external_port" required>
+                </div>
+                <button type="submit" class="success">Save Changes</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Test Controller Modal -->
+    <div id="test-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('test-modal')">&times;</span>
+            <h2>Test Controller</h2>
+            <div id="test-controller-details">
+                <p><strong>ID:</strong> <span id="test-id"></span></p>
+                <p><strong>Name:</strong> <span id="test-name"></span></p>
+                <p><strong>Version:</strong> <span id="test-version"></span></p>
+                <p><strong>Image:</strong> <span id="test-image"></span></p>
+            </div>
+            <div class="form-group">
+                <button id="start-controller-test" class="success">Start Test</button>
+            </div>
+            <div class="test-status">
+                <h3>Test Status</h3>
+                <pre id="test-status-output" style="background: #f5f5f5; padding: 1rem; border-radius: 4px; max-height: 300px; overflow: auto;">Click "Start Test" to begin testing...</pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                tab.classList.add('active');
+                
+                const tabId = tab.getAttribute('data-tab');
+                document.getElementById(tabId + '-tab').classList.add('active');
+            });
+        });
+        
+        function openAddModal() {
+            document.getElementById('add-modal').style.display = 'block';
+        }
+        
+        function openEditModal(id) {
+            fetch(`/admin/controllers/${id}`)
+                .then(response => response.json())
+                .then(controller => {
+                    document.getElementById('edit-id').value = controller.id;
+                    document.getElementById('edit-name').value = controller.name;
+                    document.getElementById('edit-version').value = controller.version;
+                    document.getElementById('edit-image').value = controller.image;
+                    document.getElementById('edit-description').value = controller.description;
+                    document.getElementById('edit-library_path').value = controller.library_path;
+                    document.getElementById('edit-proc_name').value = controller.proc_name;
+                    document.getElementById('edit-internal_port').value = controller.ports.internal;
+                    document.getElementById('edit-external_port').value = controller.ports.external;
+                    
+                    document.getElementById('edit-modal').style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error fetching controller data');
+                });
+        }
+        
+        function openTestModal(id) {
+            fetch(`/admin/controllers/${id}`)
+                .then(response => response.json())
+                .then(controller => {
+                    document.getElementById('test-id').textContent = controller.id;
+                    document.getElementById('test-name').textContent = controller.name;
+                    document.getElementById('test-version').textContent = controller.version;
+                    document.getElementById('test-image').textContent = controller.image;
+                    
+                    document.getElementById('test-modal').style.display = 'block';
+                    
+                    document.getElementById('start-controller-test').onclick = function() {
+                        testController(id);
+                    };
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error fetching controller data');
+                });
+        }
+        
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+        
+        function confirmDelete(id) {
+            if (confirm('Are you sure you want to delete this controller?')) {
+                fetch(`/admin/controllers/${id}`, {
+                    method: 'DELETE',
+                })
+                .then(response => {
+                    if (response.ok) {
+                        window.location.reload();
+                    } else {
+                        alert('Error deleting controller');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error deleting controller');
+                });
+            }
+        }
+        
+        function testController(id) {
+            const statusOutput = document.getElementById('test-status-output');
+            statusOutput.textContent = 'Starting test...';
+            
+            fetch(`/admin/controllers/${id}/test`, {
+                method: 'POST',
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    statusOutput.textContent = 'Test succeeded!\n\n' + data.output;
+                } else {
+                    statusOutput.textContent = 'Test failed!\n\n' + data.output;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                statusOutput.textContent = 'Error testing controller: ' + error.message;
+            });
+        }
+        
+        function startControllerTest() {
+            const controllerSelect = document.getElementById('test-controller');
+            const selectedId = controllerSelect.value;
+            
+            if (!selectedId) {
+                alert('Please select a controller to test');
+                return;
+            }
+            
+            const resultsDiv = document.getElementById('test-results');
+            resultsDiv.textContent = 'Starting test...';
+            
+            fetch(`/admin/controllers/${selectedId}/test`, {
+                method: 'POST',
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    resultsDiv.textContent = 'Test succeeded!\n\n' + data.output;
+                } else {
+                    resultsDiv.textContent = 'Test failed!\n\n' + data.output;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                resultsDiv.textContent = 'Error testing controller: ' + error.message;
+            });
+        }
+        
+        function stopContainer(id) {
+            if (confirm('Are you sure you want to stop this container?')) {
+                fetch(`/admin/containers/${id}/stop`, {
+                    method: 'POST',
+                })
+                .then(response => {
+                    if (response.ok) {
+                        window.location.reload();
+                    } else {
+                        alert('Error stopping container');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error stopping container');
+                });
+            }
+        }
+        
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            const modals = document.getElementsByClassName('modal');
+            for (let i = 0; i < modals.length; i++) {
+                if (event.target == modals[i]) {
+                    modals[i].style.display = 'none';
+                }
+            }
+        };
+    </script>
+</body>
+</html>

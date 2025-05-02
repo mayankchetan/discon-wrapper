@@ -31,8 +31,9 @@ type Manager struct {
 	ctx              context.Context
 	server           *http.Server
 	logger           *utils.DebugLogger
-	connCounter      int32      // Counter for connection IDs
-	counterMutex     sync.Mutex // Mutex for the counter
+	connCounter      int32         // Counter for connection IDs
+	counterMutex     sync.Mutex    // Mutex for the counter
+	adminHandler     *AdminHandler // Handler for admin UI and API
 }
 
 // ClientConnection represents a connection from a client
@@ -97,6 +98,10 @@ func (m *Manager) Start() error {
 	mux.HandleFunc("/metrics", m.HandleMetrics)
 	mux.HandleFunc("/containers", m.HandleContainers)
 	mux.HandleFunc("/controllers", m.HandleControllers)
+
+	// Initialize and set up admin handler
+	m.adminHandler = NewAdminHandler(m)
+	m.adminHandler.SetupRoutes(mux)
 
 	// Create server
 	m.server = &http.Server{
@@ -384,6 +389,11 @@ func (m *Manager) HandleControllers(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Controller: %s (Version: %s, Image: %s)\n",
 			controller.Name, controller.Version, controller.Image)
 	}
+}
+
+// getActiveContainers returns a list of active containers for the admin UI
+func (m *Manager) getActiveContainers() []*ContainerInfo {
+	return m.dockerController.ListContainers()
 }
 
 // proxyConnectionToContainer proxies the client WebSocket connection to the container
