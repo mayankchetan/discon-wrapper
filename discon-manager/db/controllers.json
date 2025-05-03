@@ -29,6 +29,96 @@
       },
       "created_at": "2025-04-30T12:00:00Z",
       "updated_at": "2025-04-30T12:00:00Z"
+    },
+    {
+      "id": "rosco-main",
+      "name": "ROSCO Controller main",
+      "version": "main",
+      "image": "discon-server-rosco:main",
+      "description": "ROSCO controller implementation version main",
+      "library_path": "/app/build/libdiscon.so",
+      "proc_name": "DISCON",
+      "ports": {
+        "internal": 8080,
+        "external": 0
+      },
+      "created_at": "2025-05-03T16:08:30Z",
+      "updated_at": "2025-05-03T16:08:30Z"
+    },
+    {
+      "id": "rosco-develop",
+      "name": "ROSCO Controller develop",
+      "version": "develop",
+      "image": "discon-server-rosco:develop",
+      "description": "ROSCO controller implementation version develop",
+      "library_path": "/app/build/libdiscon.so",
+      "proc_name": "DISCON",
+      "ports": {
+        "internal": 8080,
+        "external": 0
+      },
+      "created_at": "2025-05-03T17:32:29Z",
+      "updated_at": "2025-05-03T17:32:29Z"
+    },
+    {
+      "id": "rosco-v2_9_7",
+      "name": "ROSCO Controller v2.9.7",
+      "version": "v2.9.7",
+      "image": "discon-server-rosco:v2_9_7",
+      "description": "ROSCO controller implementation version v2.9.7",
+      "library_path": "/app/build/libdiscon.so",
+      "proc_name": "DISCON",
+      "ports": {
+        "internal": 8080,
+        "external": 0
+      },
+      "created_at": "2025-05-03T17:35:54Z",
+      "updated_at": "2025-05-03T17:35:54Z"
+    },
+    {
+      "id": "rosco-v2_9_6",
+      "name": "ROSCO Controller v2.9.6",
+      "version": "v2.9.6",
+      "image": "discon-server-rosco:v2_9_6",
+      "description": "ROSCO controller implementation version v2.9.6",
+      "library_path": "/app/build/libdiscon.so",
+      "proc_name": "DISCON",
+      "ports": {
+        "internal": 8080,
+        "external": 0
+      },
+      "created_at": "2025-05-03T17:36:40Z",
+      "updated_at": "2025-05-03T17:36:40Z"
+    },
+    {
+      "id": "rosco-v2_9_5",
+      "name": "ROSCO Controller v2.9.5",
+      "version": "v2.9.5",
+      "image": "discon-server-rosco:v2_9_5",
+      "description": "ROSCO controller implementation version v2.9.5",
+      "library_path": "/app/build/libdiscon.so",
+      "proc_name": "DISCON",
+      "ports": {
+        "internal": 8080,
+        "external": 0
+      },
+      "created_at": "2025-05-03T17:37:23Z",
+      "updated_at": "2025-05-03T17:37:23Z"
+    },
+    {
+      "id": "rosco-v2_9_4",
+      "name": "ROSCO Controller v2.9.4",
+      "version": "v2.9.4",
+      "image": "discon-server-rosco:v2_9_4",
+      "description": "ROSCO controller implementation version v2.9.4",
+      "library_path": "/app/build/libdiscon.so",
+      "proc_name": "DISCON",
+      "ports": {
+        "internal": 8080,
+        "external": 0
+      },
+      "created_at": "2025-05-03T17:38:41Z",
+      "updated_at": "2025-05-03T17:38:41Z"
     }
   ]
 }

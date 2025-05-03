@@ -1,7 +1,13 @@
 # Dockerfile for ROSCO controller image to be used with discon-manager
 
+# Accept version argument - defaults to main branch if not specified
+ARG ROSCO_VERSION=main
+
 # Stage 1: Build the ROSCO controller library
 FROM ubuntu:22.04 as rosco-builder
+
+# Pass the version argument to this stage
+ARG ROSCO_VERSION
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -14,9 +20,19 @@ RUN apt-get update && apt-get install -y \
     libblas-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Clone ROSCO repository
+# Clone ROSCO repository with specified version/tag
 WORKDIR /build
-RUN git clone --depth=1 https://github.com/NREL/ROSCO.git rosco
+RUN echo "Building ROSCO version: ${ROSCO_VERSION}" && \
+    git clone https://github.com/NREL/ROSCO.git rosco && \
+    cd rosco && \
+    if [ "${ROSCO_VERSION}" != "main" ]; then \
+        # Try to checkout as a branch first, otherwise try as a tag
+        # If version already starts with v, don't add another v
+        case "${ROSCO_VERSION}" in \
+            v*) git checkout ${ROSCO_VERSION} || git checkout tags/${ROSCO_VERSION} ;; \
+            *)  git checkout ${ROSCO_VERSION} || git checkout tags/v${ROSCO_VERSION} || git checkout tags/${ROSCO_VERSION} ;; \
+        esac; \
+    fi
 
 # Build ROSCO library
 WORKDIR /build/rosco/rosco/controller
@@ -25,9 +41,10 @@ RUN mkdir build && cd build && \
     make
 
 # Stage 2: Use the discon-server image as base
-# Build using separate build command: 
-# docker build -f docker/Dockerfile.server -t discon-server:latest .
 FROM discon-server:latest
+
+# Pass version argument to this stage
+ARG ROSCO_VERSION
 
 # Copy ROSCO library from builder stage
 COPY --from=rosco-builder /build/rosco/rosco/controller/build/libdiscon.so /app/build/libdiscon.so
@@ -41,6 +58,6 @@ ENV DEBUG_LEVEL=1
 LABEL maintainer="DisconManager Team"
 LABEL description="ROSCO wind turbine controller for discon-manager"
 LABEL controller.name="ROSCO"
-LABEL controller.version="2.6.0"
+LABEL controller.version="${ROSCO_VERSION}"
 
 # Note: ENTRYPOINT, CMD, WORKDIR, EXPOSE inherited from the discon-server base image
