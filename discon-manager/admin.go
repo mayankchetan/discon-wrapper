@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -61,6 +62,9 @@ func (ah *AdminHandler) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin/controllers/", ah.authMiddleware(ah.handleControllerOperations))
 	mux.HandleFunc("/admin/containers", ah.authMiddleware(ah.handleContainers))
 	mux.HandleFunc("/admin/containers/", ah.authMiddleware(ah.handleContainerOperations))
+
+	// Documentation endpoints
+	mux.HandleFunc("/admin/docs/", ah.authMiddleware(ah.handleDocumentation))
 }
 
 // authMiddleware wraps an HTTP handler with authentication checks
@@ -409,6 +413,29 @@ func (ah *AdminHandler) handleContainerOperations(w http.ResponseWriter, r *http
 
 	// Method not allowed
 	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+}
+
+// handleDocumentation serves documentation files
+func (ah *AdminHandler) handleDocumentation(w http.ResponseWriter, r *http.Request) {
+	// Extract the path to the requested documentation file
+	path := r.URL.Path
+
+	// Strip the "/admin/docs/" prefix to get the relative path
+	relPath := path[len("/admin/docs/"):]
+
+	// Map the path to the actual documentation file location (now in /app/docs)
+	docPath := filepath.Join("/app/docs", relPath)
+
+	// If the path is a directory or doesn't have an extension, append index.html
+	if filepath.Ext(docPath) == "" {
+		if !strings.HasSuffix(docPath, "/") {
+			docPath += "/"
+		}
+		docPath += "index.html"
+	}
+
+	// Use the built-in file server to serve the documentation file
+	http.ServeFile(w, r, docPath)
 }
 
 // testController tests a controller by starting a container and checking if it works

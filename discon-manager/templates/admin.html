@@ -18,6 +18,27 @@
             color: white;
             padding: 1rem 2rem;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header-title {
+            margin: 0;
+        }
+        .header-links {
+            display: flex;
+            gap: 1rem;
+        }
+        .header-links a {
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            background-color: rgba(255, 255, 255, 0.1);
+            transition: background-color 0.2s;
+        }
+        .header-links a:hover {
+            background-color: rgba(255, 255, 255, 0.2);
         }
         .container {
             max-width: 1200px;
@@ -193,11 +214,56 @@
         .tab-content.active {
             display: block;
         }
+        .doc-categories {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 2rem;
+        }
+        .doc-category {
+            background-color: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .doc-category h3 {
+            margin-top: 0;
+            color: #1a73e8;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 0.8rem;
+            margin-bottom: 1rem;
+        }
+        .doc-category ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+        .doc-category li {
+            margin-bottom: 0.8rem;
+        }
+        .doc-category a {
+            color: #333;
+            text-decoration: none;
+            display: block;
+            padding: 0.5rem;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+        .doc-category a:hover {
+            background-color: #f5f5f5;
+            color: #1a73e8;
+        }
+        .doc-category a:visited {
+            color: #555;
+        }
     </style>
 </head>
 <body>
     <header>
-        <h1>DisconManager Controller Administration</h1>
+        <h1 class="header-title">DisconManager Controller Administration</h1>
+        <div class="header-links">
+            <a href="/admin/docs/index.html" target="_blank">Documentation</a>
+        </div>
     </header>
     
     <div class="container">
