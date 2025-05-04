@@ -1,0 +1,134 @@
+{
+  "controllers": [
+    {
+      "id": "rosco",
+      "name": "ROSCO Controller",
+      "version": "2.6.0",
+      "image": "discon-server-rosco:latest",
+      "description": "ROSCO controller implementation",
+      "library_path": "/app/build/libdiscon.so",
+      "proc_name": "DISCON",
+      "ports": {
+        "internal": 8080,
+        "external": 0
+      },
+      "created_at": "2025-04-30T12:00:00Z",
+      "updated_at": "2025-04-30T12:00:00Z",
+      "is_valid": false
+    },
+    {
+      "id": "rosco-v2_9_4",
+      "name": "ROSCO Controller v2.9.4",
+      "version": "v2.9.4",
+      "image": "discon-server-rosco:v2_9_4",
+      "description": "ROSCO controller implementation version v2.9.4",
+      "library_path": "/app/build/libdiscon.so",
+      "proc_name": "DISCON",
+      "ports": {
+        "internal": 8080,
+        "external": 0
+      },
+      "created_at": "2025-05-03T17:38:41Z",
+      "updated_at": "2025-05-03T17:38:41Z",
+      "is_valid": false
+    },
+    {
+      "id": "default",
+      "name": "Default DISCON Controller",
+      "version": "1.0.0",
+      "image": "discon-server:latest",
+      "description": "Default controller for OpenFAST simulations",
+      "library_path": "/app/build/test-discon.dll",
+      "proc_name": "discon",
+      "ports": {
+        "internal": 8080,
+        "external": 0
+      },
+      "created_at": "2025-04-30T12:00:00Z",
+      "updated_at": "2025-04-30T12:00:00Z",
+      "is_valid": false
+    },
+    {
+      "id": "rosco-main",
+      "name": "ROSCO Controller",
+      "version": "main",
+      "image": "discon-server-rosco:latest",
+      "description": "ROSCO wind turbine controller implementation version main",
+      "library_path": "/app/build/libdiscon.so",
+      "proc_name": "DISCON",
+      "ports": {
+        "internal": 8080,
+        "external": 0
+      },
+      "created_at": "2025-05-03T16:08:30Z",
+      "updated_at": "2025-05-03T20:39:35.055228782Z",
+      "is_valid": true,
+      "validate_info": "Controller is valid, library file exists at /app/build/libdiscon.so; Warning: Symbol DISCON not found"
+    },
+    {
+      "id": "rosco-develop",
+      "name": "ROSCO Controller",
+      "version": "develop",
+      "image": "discon-server-rosco:develop",
+      "description": "ROSCO wind turbine controller implementation version develop",
+      "library_path": "/app/build/libdiscon.so",
+      "proc_name": "DISCON",
+      "ports": {
+        "internal": 8080,
+        "external": 0
+      },
+      "created_at": "2025-05-03T17:32:29Z",
+      "updated_at": "2025-05-03T20:39:35.055219625Z",
+      "is_valid": true,
+      "validate_info": "Controller is valid, library file exists at /app/build/libdiscon.so; Warning: Symbol DISCON not found"
+    },
+    {
+      "id": "rosco-v2_9_7",
+      "name": "ROSCO Controller v2.9.7",
+      "version": "v2.9.7",
+      "image": "discon-server-rosco:v2_9_7",
+      "description": "ROSCO controller implementation version v2.9.7",
+      "library_path": "/app/build/libdiscon.so",
+      "proc_name": "DISCON",
+      "ports": {
+        "internal": 8080,
+        "external": 0
+      },
+      "created_at": "2025-05-03T17:35:54Z",
+      "updated_at": "2025-05-03T17:35:54Z",
+      "is_valid": false
+    },
+    {
+      "id": "rosco-v2_9_6",
+      "name": "ROSCO Controller v2.9.6",
+      "version": "v2.9.6",
+      "image": "discon-server-rosco:v2_9_6",
+      "description": "ROSCO controller implementation version v2.9.6",
+      "library_path": "/app/build/libdiscon.so",
+      "proc_name": "DISCON",
+      "ports": {
+        "internal": 8080,
+        "external": 0
+      },
+      "created_at": "2025-05-03T17:36:40Z",
+      "updated_at": "2025-05-03T17:36:40Z",
+      "is_valid": false
+    },
+    {
+      "id": "rosco-v2_9_5",
+      "name": "ROSCO Controller v2.9.5",
+      "version": "v2.9.5",
+      "image": "discon-server-rosco:v2_9_5",
+      "description": "ROSCO controller implementation version v2.9.5",
+      "library_path": "/app/build/libdiscon.so",
+      "proc_name": "DISCON",
+      "ports": {
+        "internal": 8080,
+        "external": 0
+      },
+      "created_at": "2025-05-03T17:37:23Z",
+      "updated_at": "2025-05-03T17:37:23Z",
+      "is_valid": false
+    }
+  ]
+}

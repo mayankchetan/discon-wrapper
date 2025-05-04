@@ -18,9 +18,14 @@ RUN go build -o /discon-server discon-wrapper/discon-server
 # Create the final image
 FROM ubuntu:24.04
 
-# Install runtime dependencies
+# Install runtime dependencies including C, C++, and Fortran libraries
 RUN apt-get update && apt-get install -y \
     libc6 \
+    libstdc++6 \
+    libgcc-s1 \
+    libgfortran5 \
+    liblapack3 \
+    libblas3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the binary from the build stage
@@ -37,9 +42,9 @@ EXPOSE 8080
 
 # Start the server when the container runs
 ENTRYPOINT ["/usr/local/bin/discon-server"]
-CMD ["--port=8080"]
+CMD ["--port=8080", "--debug=1"]
 
 # Add labels
-LABEL maintainer="Derek Slaughter"
-LABEL description="DISCON-Wrapper server for bridging 64-bit OpenFAST with 32-bit controllers"
-LABEL version="v0.1.0"
+LABEL maintainer="DisconManager Team"
+LABEL description="DISCON-Wrapper server for OpenFAST controllers, managed by discon-manager"
+LABEL version="v0.2.0"

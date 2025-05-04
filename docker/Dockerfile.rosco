@@ -1,0 +1,72 @@
+# Dockerfile for ROSCO controller image to be used with discon-manager
+
+# Accept version argument - defaults to main branch if not specified
+ARG ROSCO_VERSION=main
+
+# Stage 1: Build the ROSCO controller library
+FROM ubuntu:22.04 as rosco-builder
+
+# Pass the version argument to this stage
+ARG ROSCO_VERSION
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    cmake \
+    make \
+    gcc \
+    gfortran \
+    liblapack-dev \
+    libblas-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone ROSCO repository with specified version/tag
+WORKDIR /build
+RUN echo "Building ROSCO version: ${ROSCO_VERSION}" && \
+    git clone https://github.com/NREL/ROSCO.git rosco && \
+    cd rosco && \
+    if [ "${ROSCO_VERSION}" != "main" ]; then \
+        # Try to checkout as a branch first, otherwise try as a tag
+        # If version already starts with v, don't add another v
+        case "${ROSCO_VERSION}" in \
+            v*) git checkout ${ROSCO_VERSION} || git checkout tags/${ROSCO_VERSION} ;; \
+            *)  git checkout ${ROSCO_VERSION} || git checkout tags/v${ROSCO_VERSION} || git checkout tags/${ROSCO_VERSION} ;; \
+        esac; \
+    fi
+
+# Build ROSCO library
+WORKDIR /build/rosco/rosco/controller
+RUN mkdir build && cd build && \
+    cmake .. -DBUILD_SHARED_LIBS=ON && \
+    make
+
+# Stage 2: Use the discon-server image as base
+FROM discon-server:latest
+
+# Pass version argument to this stage
+ARG ROSCO_VERSION
+
+# Copy ROSCO library from builder stage
+COPY --from=rosco-builder /build/rosco/rosco/controller/build/libdiscon.so /app/build/libdiscon.so
+
+# Set environment variables for the ROSCO controller
+ENV CONTROLLER_PATH="/controller/libdiscon.so"
+ENV CONTROLLER_PROC="DISCON"
+ENV DEBUG_LEVEL=1
+
+# Update labels for this specific controller
+LABEL maintainer="DisconManager Team"
+LABEL description="ROSCO wind turbine controller for discon-manager"
+
+# Standardized labels for controller auto-discovery
+LABEL org.discon.type="controller"
+LABEL org.discon.controller.id="rosco-${ROSCO_VERSION}"
+LABEL org.discon.controller.name="ROSCO Controller"
+LABEL org.discon.controller.version="${ROSCO_VERSION}"
+LABEL org.discon.controller.description="ROSCO wind turbine controller implementation version ${ROSCO_VERSION}"
+LABEL org.discon.controller.library_path="/app/build/libdiscon.so"
+LABEL org.discon.controller.proc_name="DISCON"
+LABEL org.discon.controller.created="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+LABEL org.discon.controller.ports='{"internal": 8080, "external": 0}'
+
+# Note: ENTRYPOINT, CMD, WORKDIR, EXPOSE inherited from the discon-server base image
