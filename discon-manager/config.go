@@ -2,12 +2,13 @@ package main
 
 // Config represents the configuration for the discon-manager
 type Config struct {
-	Server   ServerConfig   `mapstructure:"server"`
-	Docker   DockerConfig   `mapstructure:"docker"`
-	Database DatabaseConfig `mapstructure:"database"`
-	Metrics  MetricsConfig  `mapstructure:"metrics"`
-	Health   HealthConfig   `mapstructure:"health"`
-	Auth     AuthConfig     `mapstructure:"auth"`
+	Server              ServerConfig              `mapstructure:"server"`
+	Docker              DockerConfig              `mapstructure:"docker"`
+	Database            DatabaseConfig            `mapstructure:"database"`
+	ControllerDiscovery ControllerDiscoveryConfig `mapstructure:"controller_discovery"`
+	Metrics             MetricsConfig             `mapstructure:"metrics"`
+	Health              HealthConfig              `mapstructure:"health"`
+	Auth                AuthConfig                `mapstructure:"auth"`
 }
 
 // ServerConfig represents the server configuration
@@ -29,6 +30,22 @@ type DockerConfig struct {
 // DatabaseConfig represents the database configuration
 type DatabaseConfig struct {
 	Path string `mapstructure:"path"`
+}
+
+// ControllerDiscoveryConfig represents controller discovery configuration
+type ControllerDiscoveryConfig struct {
+	Mode            string                     `mapstructure:"mode"` // "manual", "startup", or "periodic"
+	IntervalMinutes int                        `mapstructure:"interval_minutes"`
+	AutoRegister    bool                       `mapstructure:"auto_register"`
+	RemoveMissing   bool                       `mapstructure:"remove_missing"`
+	Validation      ControllerValidationConfig `mapstructure:"validation"`
+}
+
+// ControllerValidationConfig represents controller validation configuration
+type ControllerValidationConfig struct {
+	Enabled       bool `mapstructure:"enabled"`
+	VerifySymbols bool `mapstructure:"verify_symbols"`
+	TestCall      bool `mapstructure:"test_call"`
 }
 
 // MetricsConfig represents the metrics configuration

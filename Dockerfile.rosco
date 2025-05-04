@@ -36,11 +36,17 @@ COPY --from=rosco-builder /build/rosco/rosco/controller/build/libdiscon.so /cont
 ENV CONTROLLER_PATH="/controller/libdiscon.so"
 ENV CONTROLLER_PROC="DISCON"
 
-# Update labels for this specific controller
+# Update labels for this specific controller with standardized format
 LABEL maintainer="disconServer"
 LABEL description="ROSCO wind turbine controller for disconServer"
-LABEL controller.name="ROSCO"
-LABEL controller.version="1.0.0"
 
-# Note: We don't need to specify ENTRYPOINT, CMD, WORKDIR, EXPOSE, etc.
-# because they're inherited from the base discon-wrapper image
+# Standardized labels for controller auto-discovery
+LABEL org.discon.type="controller"
+LABEL org.discon.controller.id="rosco-controller"
+LABEL org.discon.controller.name="ROSCO Controller"
+LABEL org.discon.controller.version="1.0.0"
+LABEL org.discon.controller.description="ROSCO wind turbine controller implementation"
+LABEL org.discon.controller.library_path="/controller/libdiscon.so"
+LABEL org.discon.controller.proc_name="DISCON"
+LABEL org.discon.controller.created="2025-05-03T12:00:00Z"
+LABEL org.discon.controller.ports='{"internal": 8080, "external": 0}'

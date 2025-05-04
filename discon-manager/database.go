@@ -4,29 +4,32 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
 
 // ControllerDatabase represents the database of controller configurations
 type ControllerDatabase struct {
-	path       string
+	path        string
 	controllers map[string]*Controller
-	mutex      sync.RWMutex
+	mutex       sync.RWMutex
 }
 
 // Controller represents a controller configuration
 type Controller struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Version     string    `json:"version"`
-	Image       string    `json:"image"`
-	Description string    `json:"description"`
-	LibraryPath string    `json:"library_path"`
-	ProcName    string    `json:"proc_name"`
-	Ports       PortPair  `json:"ports"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	Version      string    `json:"version"`
+	Image        string    `json:"image"`
+	Description  string    `json:"description"`
+	LibraryPath  string    `json:"library_path"`
+	ProcName     string    `json:"proc_name"`
+	Ports        PortPair  `json:"ports"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	IsValid      bool      `json:"is_valid"`
+	ValidateInfo string    `json:"validate_info,omitempty"`
 }
 
 // PortPair represents a pair of internal and external ports
@@ -40,10 +43,20 @@ type DatabaseFile struct {
 	Controllers []*Controller `json:"controllers"`
 }
 
+// DiscoveryStats represents the statistics of the discovery process
+type DiscoveryStats struct {
+	Added     int
+	Updated   int
+	Removed   int
+	Unchanged int
+	Failed    int
+	FailedIDs []string
+}
+
 // NewControllerDatabase creates a new controller database
 func NewControllerDatabase(path string) (*ControllerDatabase, error) {
 	db := &ControllerDatabase{
-		path:       path,
+		path:        path,
 		controllers: make(map[string]*Controller),
 	}
 
@@ -130,6 +143,11 @@ func (db *ControllerDatabase) AddController(controller *Controller) error {
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 
+	// Check for periods in controller ID - they're not allowed because they cause issues in URLs
+	if strings.Contains(controller.ID, ".") {
+		return fmt.Errorf("controller ID %q contains periods (.), which are not allowed; use hyphens (-) or underscores (_) instead", controller.ID)
+	}
+
 	// Set timestamps if not set
 	if controller.CreatedAt.IsZero() {
 		controller.CreatedAt = time.Now()
@@ -138,6 +156,33 @@ func (db *ControllerDatabase) AddController(controller *Controller) error {
 		controller.UpdatedAt = time.Now()
 	}
 
+	db.controllers[controller.ID] = controller
+
+	// Save the database
+	return db.save()
+}
+
+// UpdateController updates an existing controller in the database
+func (db *ControllerDatabase) UpdateController(controller *Controller) error {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
+
+	// Check for periods in controller ID - they're not allowed because they cause issues in URLs
+	if strings.Contains(controller.ID, ".") {
+		return fmt.Errorf("controller ID %q contains periods (.), which are not allowed; use hyphens (-) or underscores (_) instead", controller.ID)
+	}
+
+	// Check if controller exists
+	existing, ok := db.controllers[controller.ID]
+	if !ok {
+		return fmt.Errorf("controller with ID %q not found", controller.ID)
+	}
+
+	// Update timestamp
+	controller.CreatedAt = existing.CreatedAt
+	controller.UpdatedAt = time.Now()
+
+	// Replace controller
 	db.controllers[controller.ID] = controller
 
 	// Save the database
@@ -183,4 +228,128 @@ func (db *ControllerDatabase) save() error {
 	}
 
 	return nil
+}
+
+// RegisterDiscoveredControllers registers controllers that were discovered from Docker images
+func (db *ControllerDatabase) RegisterDiscoveredControllers(discovered []DiscoveredController, removeMissing bool) (*DiscoveryStats, error) {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
+
+	stats := &DiscoveryStats{
+		FailedIDs: make([]string, 0),
+	}
+
+	// Create map of discovered controller IDs
+	discoveredIds := make(map[string]bool)
+
+	// Process each discovered controller
+	for _, disc := range discovered {
+		// Check for periods in controller ID - they're not allowed because they cause issues in URLs
+		if strings.Contains(disc.ID, ".") {
+			// Don't fail, but log this in stats and skip the controller
+			stats.Failed++
+			stats.FailedIDs = append(stats.FailedIDs, disc.ID)
+			continue
+		}
+
+		// Generate a controller from discovered info
+		controller := &Controller{
+			ID:          disc.ID,
+			Name:        disc.Name,
+			Version:     disc.Version,
+			Image:       disc.Image,
+			Description: disc.Description,
+			LibraryPath: disc.LibraryPath,
+			ProcName:    disc.ProcName,
+			Ports: PortPair{
+				Internal: disc.Ports.Internal,
+				External: disc.Ports.External,
+			},
+			UpdatedAt:    time.Now(),
+			IsValid:      disc.IsValid,
+			ValidateInfo: disc.ValidateInfo,
+		}
+
+		// Parse creation time if available, otherwise use now
+		if disc.CreatedAt != "" {
+			if created, err := time.Parse(time.RFC3339, disc.CreatedAt); err == nil {
+				controller.CreatedAt = created
+			} else {
+				controller.CreatedAt = time.Now()
+			}
+		} else {
+			controller.CreatedAt = time.Now()
+		}
+
+		// Track failing controllers for stats, but still register them if
+		// they're valid but have warnings (like missing proc_name symbol)
+		if !disc.IsValid {
+			stats.Failed++
+			stats.FailedIDs = append(stats.FailedIDs, disc.ID)
+
+			// Skip controllers that critically failed validation (completely invalid)
+			// Controllers with just warnings about symbol verification will have IsValid=true
+			// but will have ValidateInfo containing warning messages
+			continue
+		}
+
+		// Track this ID as discovered
+		discoveredIds[disc.ID] = true
+
+		// Check if controller already exists
+		existing, exists := db.controllers[disc.ID]
+		if exists {
+			// Check if any fields have changed
+			if controllerNeedsUpdate(existing, controller) {
+				// Keep creation time from existing record
+				controller.CreatedAt = existing.CreatedAt
+
+				// Update controller
+				db.controllers[disc.ID] = controller
+				stats.Updated++
+			} else {
+				stats.Unchanged++
+			}
+		} else {
+			// Add new controller
+			db.controllers[disc.ID] = controller
+			stats.Added++
+		}
+	}
+
+	// Remove controllers that no longer exist in Docker
+	if removeMissing {
+		for id := range db.controllers {
+			if !discoveredIds[id] {
+				delete(db.controllers, id)
+				stats.Removed++
+			}
+		}
+	}
+
+	// Save changes to database file
+	if stats.Added > 0 || stats.Updated > 0 || stats.Removed > 0 {
+		if err := db.save(); err != nil {
+			return stats, fmt.Errorf("error saving database after registration: %w", err)
+		}
+	}
+
+	return stats, nil
+}
+
+// controllerNeedsUpdate checks if a controller needs to be updated
+func controllerNeedsUpdate(existing, new *Controller) bool {
+	if existing.Name != new.Name ||
+		existing.Version != new.Version ||
+		existing.Image != new.Image ||
+		existing.Description != new.Description ||
+		existing.LibraryPath != new.LibraryPath ||
+		existing.ProcName != new.ProcName ||
+		existing.Ports.Internal != new.Ports.Internal ||
+		existing.Ports.External != new.Ports.External ||
+		existing.IsValid != new.IsValid ||
+		existing.ValidateInfo != new.ValidateInfo {
+		return true
+	}
+	return false
 }

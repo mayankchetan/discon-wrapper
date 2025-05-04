@@ -18,6 +18,17 @@ docker:
 database:
   path: "/app/db/controllers.json"  # Will be mounted from host
 
+# Controller discovery configuration
+controller_discovery:
+  mode: "startup"               # Options: "manual", "startup", "periodic"
+  interval_minutes: 30          # Only used if mode is "periodic"
+  auto_register: true           # Whether to auto-register discovered controllers
+  remove_missing: false         # Whether to remove controllers whose images no longer exist
+  validation:
+    enabled: true               # Whether to validate controllers before registering
+    verify_symbols: true        # Check if the required symbols exist in the library
+    test_call: false            # Perform a basic test call to the controller
+
 # Metrics configuration
 metrics:
   enabled: true

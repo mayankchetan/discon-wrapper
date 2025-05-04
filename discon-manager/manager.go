@@ -55,8 +55,17 @@ type ClientConnection struct {
 
 // NewManager creates a new manager
 func NewManager(ctx context.Context, config *Config) (*Manager, error) {
+	// Create main logger
+	logger := utils.NewDebugLogger(config.Server.DebugLevel, "discon-manager")
+
+	// Create controller discovery config if needed
+	var discoveryConfig *ControllerDiscoveryConfig
+	if config.ControllerDiscovery.Mode != "manual" {
+		discoveryConfig = &config.ControllerDiscovery
+	}
+
 	// Create Docker controller
-	dockerController, err := NewDockerController(ctx, config.Docker)
+	dockerController, err := NewDockerController(ctx, config.Docker, discoveryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error creating Docker controller: %w", err)
 	}
@@ -66,9 +75,6 @@ func NewManager(ctx context.Context, config *Config) (*Manager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error creating controller database: %w", err)
 	}
-
-	// Create main logger
-	logger := utils.NewDebugLogger(config.Server.DebugLevel, "discon-manager")
 
 	// Create manager
 	manager := &Manager{
@@ -107,6 +113,18 @@ func (m *Manager) Start() error {
 	m.server = &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", m.config.Server.Host, m.config.Server.Port),
 		Handler: mux,
+	}
+
+	// If controller discovery is enabled, run discovery
+	if m.config.ControllerDiscovery.Mode == "startup" || m.config.ControllerDiscovery.Mode == "periodic" {
+		if err := m.RunControllerDiscovery(); err != nil {
+			m.logger.Error("Error running controller discovery: %v", err)
+		}
+	}
+
+	// If periodic discovery is enabled, start discovery goroutine
+	if m.config.ControllerDiscovery.Mode == "periodic" && m.config.ControllerDiscovery.IntervalMinutes > 0 {
+		go m.periodicDiscoveryRoutine()
 	}
 
 	// Start server in a goroutine
@@ -177,6 +195,12 @@ func (m *Manager) cleanupInactiveContainers() {
 	m.connMutex.RLock()
 	defer m.connMutex.RUnlock()
 
+	// Get a list of connections to clean up to avoid modification during iteration
+	var containersToCleanup []struct {
+		containerID string
+		clientID    string
+	}
+
 	// Check if any containers need to be cleaned up
 	for _, conn := range m.connections {
 		if conn.ContainerID == "" {
@@ -185,12 +209,27 @@ func (m *Manager) cleanupInactiveContainers() {
 
 		// If the connection hasn't been active for a while, clean up the container
 		if time.Since(conn.LastActivityAt) > time.Duration(m.config.Docker.CleanupTimeout)*time.Second {
-			m.logger.Debug("Cleaning up inactive container %s for client %s", conn.ContainerID, conn.ID)
+			// Add to our cleanup list instead of cleaning immediately
+			containersToCleanup = append(containersToCleanup, struct {
+				containerID string
+				clientID    string
+			}{
+				containerID: conn.ContainerID,
+				clientID:    conn.ID,
+			})
+		}
+	}
+
+	// Clean up the containers outside the lock
+	for _, container := range containersToCleanup {
+		// Double-check the container is still in our tracking map before trying to clean up
+		if _, exists := m.dockerController.GetContainer(container.containerID); exists {
+			m.logger.Debug("Cleaning up inactive container %s for client %s", container.containerID, container.clientID)
 			go func(containerID string) {
 				if err := m.dockerController.StopContainer(m.ctx, containerID); err != nil {
 					m.logger.Error("Error stopping container %s: %v", containerID, err)
 				}
-			}(conn.ContainerID)
+			}(container.containerID)
 		}
 	}
 }
@@ -683,4 +722,55 @@ func (cc *ClientConnection) Close() {
 	cc.manager.connMutex.Unlock()
 
 	cc.logger.Debug("Connection closed")
+}
+
+// RunControllerDiscovery discovers controller images and registers them
+func (m *Manager) RunControllerDiscovery() error {
+	m.logger.Debug("Running controller discovery...")
+
+	// Discover controller images
+	controllers, err := m.dockerController.DiscoverControllerImages(m.ctx)
+	if err != nil {
+		return fmt.Errorf("error discovering controller images: %w", err)
+	}
+
+	m.logger.Debug("Found %d controller images", len(controllers))
+
+	// Register controllers in the database
+	stats, err := m.database.RegisterDiscoveredControllers(
+		controllers,
+		m.config.ControllerDiscovery.RemoveMissing,
+	)
+	if err != nil {
+		return fmt.Errorf("error registering controllers: %w", err)
+	}
+
+	m.logger.Debug("Controller registration stats: Added=%d, Updated=%d, Removed=%d, Failed=%d",
+		stats.Added, stats.Updated, stats.Removed, stats.Failed)
+
+	if stats.Failed > 0 {
+		m.logger.Error("Some controllers failed validation but will be used with warnings: %v", stats.FailedIDs)
+	}
+
+	return nil
+}
+
+// periodicDiscoveryRoutine periodically runs controller discovery
+func (m *Manager) periodicDiscoveryRoutine() {
+	interval := time.Duration(m.config.ControllerDiscovery.IntervalMinutes) * time.Minute
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	m.logger.Debug("Starting periodic controller discovery (interval: %v)", interval)
+
+	for {
+		select {
+		case <-m.ctx.Done():
+			return
+		case <-ticker.C:
+			if err := m.RunControllerDiscovery(); err != nil {
+				m.logger.Error("Error running periodic controller discovery: %v", err)
+			}
+		}
+	}
 }

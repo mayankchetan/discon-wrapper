@@ -386,7 +386,8 @@
             <form id="add-controller-form" method="POST" action="/admin/controllers">
                 <div class="form-group">
                     <label for="id">Controller ID:</label>
-                    <input type="text" id="id" name="id" required>
+                    <input type="text" id="id" name="id" pattern="[^.]*" title="Controller ID cannot contain periods (.) because they cause issues in URLs. Use hyphens or underscores instead." required>
+                    <small style="color: #721c24;">Important: Do not use periods (.) in controller IDs as they cause issues when passing IDs in URLs. Use hyphens (-) or underscores (_) instead.</small>
                 </div>
                 <div class="form-group">
                     <label for="name">Name:</label>
@@ -432,6 +433,11 @@
             <h2>Edit Controller</h2>
             <form id="edit-controller-form" method="POST" action="/admin/controllers/update">
                 <input type="hidden" id="edit-id" name="id">
+                <div class="form-group">
+                    <label>Controller ID:</label>
+                    <input type="text" disabled value="ID cannot be changed" style="background-color: #f5f5f5;">
+                    <small style="color: #721c24;">Note: Controller IDs cannot contain periods (.) as they cause issues when passing IDs in URLs.</small>
+                </div>
                 <div class="form-group">
                     <label for="edit-name">Name:</label>
                     <input type="text" id="edit-name" name="name" required>

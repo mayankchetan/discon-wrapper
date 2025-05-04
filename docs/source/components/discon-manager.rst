@@ -69,7 +69,32 @@ The discon-manager handles the complete lifecycle of controller containers:
 - **Creation**: Containers are created on-demand when clients request a particular controller version
 - **Monitoring**: Active containers are monitored for health and resource usage
 - **Proxy**: WebSocket traffic is proxied between clients and containers
-- **Cleanup**: Containers are automatically stopped and removed after a period of inactivity
+- **Cleanup**: Containers are automatically stopped and removed after a period of inactivity using Docker's container.StopOptions interface
+
+Container Lifecycle
+------------------
+
+The container lifecycle is managed through several key functions:
+
+1. **StartContainer**: Creates and starts a new container with proper resource limits and network configuration
+2. **StopContainer**: Gracefully stops a container with configurable timeout and removes it 
+3. **CleanupContainers**: Stops and removes all containers during system shutdown
+4. **cleanupInactiveContainers**: Periodically checks for and removes containers that haven't been active
+
+Container Stop Handling
+---------------------
+
+The discon-manager uses Docker's modern container.StopOptions interface for graceful container shutdown:
+
+.. code-block:: go
+
+    // Example of container stop with timeout
+    timeoutSeconds := 10
+    err := dockerClient.ContainerStop(ctx, containerID, container.StopOptions{
+        Timeout: &timeoutSeconds,
+    })
+
+This provides a configurable grace period for containers to shut down cleanly before being forcefully terminated.
 
 Configuration
 ===========
@@ -139,6 +164,46 @@ This allows administrators to:
 1. Register different controller versions
 2. Specify different Docker images for each controller
 3. Configure controller-specific settings (library path, procedure name)
+
+Controller Discovery and Validation
+============================
+
+The discon-manager includes an automated controller discovery system that finds and registers controller images based on Docker labels:
+
+Controller Discovery
+------------------
+
+Images are discovered using Docker's filter API:
+
+.. code-block:: go
+
+    filters := filters.NewArgs()
+    filters.Add("label", "org.discon.type=controller")
+    
+    images, err := dockerClient.ImageList(ctx, types.ImageListOptions{
+        Filters: filters,
+    })
+
+Required controller labels include:
+
+- **org.discon.type**: Must be "controller"
+- **org.discon.controller.id**: Unique controller ID
+- **org.discon.controller.name**: Human-readable name
+- **org.discon.controller.version**: Version string
+- **org.discon.controller.library_path**: Path to controller library file
+- **org.discon.controller.proc_name**: Name of entry point function
+
+Controller Validation
+-------------------
+
+Discovered controllers undergo validation before registration:
+
+1. **Container Creation**: A temporary validation container is started
+2. **Library Check**: Verifies the controller library file exists
+3. **Symbol Verification**: Optionally checks for controller entry point function
+4. **Cleanup**: Validation container is removed after checks complete
+
+The validation process uses Docker's container lifecycle APIs and exec functionality to verify controller integrity.
 
 Administration Interface
 ======================

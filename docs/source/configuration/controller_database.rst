@@ -44,7 +44,7 @@ Each controller entry in the database supports the following fields:
    * - Field
      - Description
    * - id
-     - **Required**. Unique identifier for the controller. Used in client requests.
+     - **Required**. Unique identifier for the controller. Used in client requests. **Important**: Do not use periods (``.``) in controller IDs as they can cause issues when the ID is used in URLs for the ``DISCON_LIB_PATH`` environment variable. Use hyphens (``-``) or underscores (``_``) instead.
    * - name
      - **Required**. Human-readable name for the controller.
    * - version

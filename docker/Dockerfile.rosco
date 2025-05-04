@@ -57,7 +57,16 @@ ENV DEBUG_LEVEL=1
 # Update labels for this specific controller
 LABEL maintainer="DisconManager Team"
 LABEL description="ROSCO wind turbine controller for discon-manager"
-LABEL controller.name="ROSCO"
-LABEL controller.version="${ROSCO_VERSION}"
+
+# Standardized labels for controller auto-discovery
+LABEL org.discon.type="controller"
+LABEL org.discon.controller.id="rosco-${ROSCO_VERSION}"
+LABEL org.discon.controller.name="ROSCO Controller"
+LABEL org.discon.controller.version="${ROSCO_VERSION}"
+LABEL org.discon.controller.description="ROSCO wind turbine controller implementation version ${ROSCO_VERSION}"
+LABEL org.discon.controller.library_path="/app/build/libdiscon.so"
+LABEL org.discon.controller.proc_name="DISCON"
+LABEL org.discon.controller.created="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+LABEL org.discon.controller.ports='{"internal": 8080, "external": 0}'
 
 # Note: ENTRYPOINT, CMD, WORKDIR, EXPOSE inherited from the discon-server base image
