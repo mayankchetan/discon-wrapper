@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -71,6 +72,17 @@ func NewDockerController(ctx context.Context, config DockerConfig, discovery *Co
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, fmt.Errorf("error creating Docker client: %w", err)
+	}
+
+	// Initialize environment map if nil to avoid nil map panics
+	if config.Environment == nil {
+		config.Environment = make(map[string]string)
+	}
+
+	// If we have a TZ environment variable in the host process, use it to set the default timezone
+	if tz := os.Getenv("TZ"); tz != "" && config.Environment["TZ"] == "" {
+		config.Environment["TZ"] = tz
+		log.Printf("Using host timezone: %s", tz)
 	}
 
 	controller := &DockerController{
@@ -181,6 +193,12 @@ func (dc *DockerController) StartContainer(ctx context.Context, controller *Cont
 		return nil, err
 	}
 
+	// Get timezone from environment
+	containerTZ := "UTC" // Default to UTC
+	if tz, ok := dc.config.Environment["TZ"]; ok && tz != "" {
+		containerTZ = tz
+	}
+
 	// Create container configuration
 	config := &container.Config{
 		Image:    controller.Image,
@@ -190,6 +208,7 @@ func (dc *DockerController) StartContainer(ctx context.Context, controller *Cont
 		},
 		Env: []string{
 			"DEBUG_LEVEL=1",
+			fmt.Sprintf("TZ=%s", containerTZ),
 		},
 	}
 
@@ -207,6 +226,14 @@ func (dc *DockerController) StartContainer(ctx context.Context, controller *Cont
 				},
 			},
 		},
+	}
+
+	// Mount timezone files from host if enabled
+	if dc.config.MountTimezone {
+		hostConfig.Binds = append(hostConfig.Binds,
+			"/etc/timezone:/etc/timezone:ro",
+			"/etc/localtime:/etc/localtime:ro",
+		)
 	}
 
 	// Set up network configuration
@@ -535,11 +562,18 @@ func (dc *DockerController) ValidateController(ctx context.Context, controller D
 		return false, fmt.Sprintf("Error cleaning up existing validation container: %v", err)
 	}
 
-	// Create container config
+	// Get timezone from environment
+	containerTZ := "UTC" // Default to UTC
+	if tz, ok := dc.config.Environment["TZ"]; ok && tz != "" {
+		containerTZ = tz
+	}
+
+	// Create container config with timezone environment variable
 	config := &container.Config{
 		Image:    controller.Image,
 		Hostname: containerName,
 		Cmd:      []string{"sleep", "10"}, // Just keep the container alive briefly
+		Env:      []string{fmt.Sprintf("TZ=%s", containerTZ)},
 	}
 
 	// Create the container

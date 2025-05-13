@@ -16,6 +16,10 @@ services:
       - ./metrics:/app/metrics
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock
+      # Time zone configuration - set this to your desired time zone
+      # This will be used by both the manager and the spawned containers
+      # Examples: UTC, America/New_York, Europe/London, Asia/Tokyo
+      - TZ=${TZ:-UTC}  # Default to UTC if not specified
 
 # Still define the network for the containers that will be spawned by the manager
 networks:

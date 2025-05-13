@@ -1,0 +1,96 @@
+# DISCON-Wrapper System Architecture Diagram
+
+## Main Components
+
+### 1. Client Environment (Left Side)
+- OpenFAST simulation (64-bit)
+- discon-client library loaded by OpenFAST
+- Local input files (DISCON.IN, etc.)
+
+### 2. Management Layer (Center, Optional)
+- discon-manager server
+- Controller database (controllers.json)
+- Docker container management system
+- Web-based admin interface
+
+### 3. Server Environment (Right Side)
+- Docker containers running discon-server
+- 32-bit controller libraries (.dll/.so)
+- Temporary file storage for transferred files
+
+## Communication Flows
+
+### Primary Data Flow
+1. OpenFAST calls DISCON function in discon-client (local function calls)
+2. discon-client sends controller parameters via WebSocket to discon-manager or directly to discon-server
+3. discon-manager (if used) routes connection to appropriate container
+4. discon-server loads controller library and calls its DISCON function
+5. Results are returned via the same path back to OpenFAST
+
+### File Transfer Flow
+1. discon-client detects input file access (e.g., DISCON.IN)
+2. Files are automatically transferred to server before controller execution
+3. Server stores files in container-specific temporary locations
+4. Controller accesses transferred files during execution
+
+## Deployment Scenarios
+
+### Simple Deployment
+- Direct WebSocket connection between discon-client and discon-server
+- Suitable for testing and simple setups
+- Connection: ws://server:port/
+
+### Production Deployment with discon-manager
+- discon-manager orchestrates multiple controller containers
+- Clients connect through manager which routes to appropriate container
+- Supports controller versioning and container resource management
+- Connection: ws://manager:port/ws?controller=ID&version=VERSION
+
+## Key Components Detail
+
+### discon-client
+- 64-bit shared library (.dll/.so)
+- Implements standard DISCON interface for OpenFAST
+- Forwards calls to server via WebSocket
+- Handles automatic file transfers
+- Configured via environment variables
+
+### discon-server
+- 32-bit executable
+- Loads controller libraries dynamically
+- Creates temporary copies for connection isolation
+- Communicates with client via WebSocket
+- Manages transferred files
+
+### discon-manager
+- Container orchestration system
+- Dynamically creates/removes containers based on demand
+- Routes client connections to appropriate containers
+- Manages controller database and versioning
+- Provides monitoring and administration interface
+
+## Configuration Elements
+
+### Environment Variables
+- DISCON_SERVER_ADDR: Server address
+- DISCON_LIB_PATH: Controller library path
+- DISCON_LIB_PROC: Controller function name
+- DISCON_CLIENT_DEBUG: Debug level
+- DISCON_CONTROLLER: Controller ID (for manager)
+- DISCON_VERSION: Controller version (for manager)
+
+### Container Management
+- Resource limits (memory, CPU)
+- Automatic cleanup after inactivity
+- Container isolation for security
+- Dynamic scaling based on demand
+
+## Special Features to Highlight
+
+1. Cross-architecture compatibility (64-bit ↔ 32-bit)
+2. Cross-platform support (Windows ↔ Linux)
+3. Zero-code-change integration with existing OpenFAST workflows
+4. Automatic file transfer system
+5. Controller version management and selection
+6. Container-based isolation for security and stability
+7. WebSocket-based low-latency communication

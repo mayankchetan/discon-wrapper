@@ -20,11 +20,13 @@ type ServerConfig struct {
 
 // DockerConfig represents the Docker configuration
 type DockerConfig struct {
-	NetworkName     string  `mapstructure:"network_name"`
-	ContainerPrefix string  `mapstructure:"container_prefix"`
-	MemoryLimit     string  `mapstructure:"memory_limit"`
-	CPULimit        float64 `mapstructure:"cpu_limit"`
-	CleanupTimeout  int     `mapstructure:"cleanup_timeout"`
+	NetworkName     string            `mapstructure:"network_name"`
+	ContainerPrefix string            `mapstructure:"container_prefix"`
+	MemoryLimit     string            `mapstructure:"memory_limit"`
+	CPULimit        float64           `mapstructure:"cpu_limit"`
+	CleanupTimeout  int               `mapstructure:"cleanup_timeout"`
+	MountTimezone   bool              `mapstructure:"mount_timezone"`
+	Environment     map[string]string `mapstructure:"environment"`
 }
 
 // DatabaseConfig represents the database configuration

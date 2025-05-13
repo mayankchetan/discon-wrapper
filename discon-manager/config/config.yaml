@@ -13,6 +13,11 @@ docker:
   memory_limit: "512m"  # 512MB memory limit per container
   cpu_limit: 1.0  # 1 CPU core limit per container
   cleanup_timeout: 30  # Seconds to wait after connection closes before removing container
+  mount_timezone: false  # Do not mount timezone files from host to containers
+  environment:
+    # These will be passed to containers that are created
+    # Can be overridden by environment variables in docker-compose.yml
+    TZ: "${TZ:-UTC}"  # Use TZ from environment or default to UTC
 
 # Database configuration
 database:
